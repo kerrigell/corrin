@@ -53,6 +53,8 @@ class t_server(Base):
     __searchword__ = None
     id = Column(Integer, primary_key=True)
     pid = Column(Integer)
+    # 记录上层硬件所属ID，用途：虚拟机-》物理机
+    mid = Column(Integer)
     region = Column(Enum('hk', 'vn', 'id', 'in', 'tw', 'th', 'us', 'my', 'cn'))
     product = Column(
         Enum('tlbb', 'ldj', 'taoyuan', 'guyu', 'totem', 'specialforce', 'gamefuse', 'oppaplay', 'gamiction', 'cuaban',
@@ -138,8 +140,7 @@ class t_feature(Base):
     feature = Column(VARCHAR(50))
     detail = Column(VARCHAR(50))
     server_id = Column(Integer)
-    fabric = Column(VARCHAR(50))
-    exec_info = Column(VARCHAR(200))
+
 
 
 class t_ipsec(Base):

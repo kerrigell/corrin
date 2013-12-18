@@ -214,6 +214,7 @@ class Feature(NodeNet):
 
     def __str__(self):
         return "<%s:%s>" % (self.s.feature, self.s.detail)
+    
 
     def print_structure(self):
         print "%s+-%s" % (string.ljust('', self.level * 4), "%s---%s->%s" % (
@@ -629,7 +630,7 @@ class IPsec(object):
             parent_iplist.append(self.server.parent.s.ip_public)
             parent_iplist.append(self.server.parent.s.ip_private)
             parent_iplist.append(self.server.parent.s.ip_oper)
-            parent_iplist = [i for i in parent_iplist if i]
+            parent_iplist = [i for i in parent_iplist if i]	
             parent_iplist = list(set(parent_iplist))
 
             for item in parent_iplist:

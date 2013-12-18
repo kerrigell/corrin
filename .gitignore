@@ -36,3 +36,5 @@ nosetests.xml
 testmain.py
 command.txt
 .idea/
+corrin_prj.wpr
+corrin_prj.wpu
