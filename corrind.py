@@ -13,6 +13,7 @@ import tornado.websocket
 import os.path
 import uuid
 
-from tornado.options import define,options
-define("port",default=8112, help='run on the given port',type=int)
+from tornado.options import define, options
+
+define("port", default=8112, help='run on the given port', type=int)
 

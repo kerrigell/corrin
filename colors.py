@@ -26,20 +26,21 @@ version of the original color on most terminals.
 
 
 def _wrap_with(code):
-
-    def inner(text, bold=False, prompt= False):
+    def inner(text, bold=False, prompt=False):
         c = code
         if bold:
             c = "1;%s" % c
         return "%s\033[%sm%s%s%s\033[0m%s" % ('\001' if prompt else '',
-                                                  c, 
-                                                  '\002' if prompt else '',
-                                                  text,
-                                                  '\001' if prompt else '',
-                                                  '\002' if prompt else ''
-                                                  )
-    #    return "\001\033[%sm\002%s\001\033[0m\002" % (c, text)
+                                              c,
+                                              '\002' if prompt else '',
+                                              text,
+                                              '\001' if prompt else '',
+                                              '\002' if prompt else ''
+        )
+
+        #    return "\001\033[%sm\002%s\001\033[0m\002" % (c, text)
     return inner
+
 
 red = _wrap_with('31')
 green = _wrap_with('32')

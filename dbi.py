@@ -3,32 +3,33 @@
 # Author:  Haiyang Peng
 # Purpose:
 # Created: 2013/6/28
-
+import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, BigInteger, VARCHAR, Text, DateTime, DATETIME, SMALLINT, TIMESTAMP
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.types import SchemaType, TypeDecorator, Enum
 from sqlalchemy.orm import sessionmaker
-import  ConfigParser
+import ConfigParser
 import time, datetime
-import  sys,os.path
+import sys, os.path
+
 
 def _get_db_string():
-    config =ConfigParser.SafeConfigParser()
+    config = ConfigParser.SafeConfigParser()
     base_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
     config.read(os.path.join(base_path, "config/dbi.ini"))
-    dblink="""%s://%s%s@%s/%s?charset=%s""" % (config.get('database','engine'),
-                                                                config.get('database','user'),
-                                                                config.get('database','password') if config.get('database','password') else '',
-                                                                config.get('database','host'),
-                                                                config.get('database','database'),
-                                                                config.get('database','charset'))
-    return  dblink
+    dblink = """%s://%s%s@%s/%s?charset=%s""" % (config.get('database', 'engine'),
+                                                 config.get('database', 'user'),
+                                                 config.get('database', 'password') if config.get('database',
+                                                                                                  'password') else '',
+                                                 config.get('database', 'host'),
+                                                 config.get('database', 'database'),
+                                                 config.get('database', 'charset'))
+    return dblink
 
 
-
-engine = create_engine(_get_db_string(), pool_size=4,pool_recycle=10,max_overflow=10)
+engine = create_engine(_get_db_string(), pool_size=4, pool_recycle=10, max_overflow=10)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
 session = Session()
@@ -142,7 +143,6 @@ class t_feature(Base):
     server_id = Column(Integer)
 
 
-
 class t_ipsec(Base):
     __tablename__ = 't_ipsec'
     id = Column(Integer, primary_key=True)
@@ -202,12 +202,15 @@ class t_crontab(Base):
     create_time = Column(TIMESTAMP)
     update_time = Column(TIMESTAMP)
 
+
 class t_iptables(Base):
     __tablename__ = 't_iptables'
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     trx_id = Column(VARCHAR(16))
-    trx_time = Column(TIMESTAMP) # If set this column to be generate by SQLAlchemy, be careful to set ON UPDATE PROPERTY.
+    trx_time = Column(
+        TIMESTAMP) # If set this column to be generate by SQLAlchemy, be careful to set ON UPDATE PROPERTY.
+
 
 class t_iptables_rules(Base):
     __tablename__ = 't_iptables_rules'
@@ -220,5 +223,5 @@ class t_iptables_rules(Base):
     arg = Column(VARCHAR(150))
 
 #class t_mysql(Base):
-    #__tablename__='t_mysql'
-    #id = Column(Integer, primary_key=True)
+#__tablename__='t_mysql'
+#id = Column(Integer, primary_key=True)
