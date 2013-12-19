@@ -30,7 +30,87 @@ from node import Nagios
 from node import IPsec
 from node import SysInfo
 from node import Transfer
-from node import Iptables
+from node import ExecuteOut
+
+
+import Queue
+import threading
+import time
+
+class WorkManager(object):
+    def __init__(self,thread_num=2):
+        self.work_queue = Queue.Queue()
+        self.result_queue = Queue.Queue()
+        self.threads = []
+    #    self.__init_work_queue(work_num)
+        self.__init_thread_pool(thread_num)
+
+
+    #初始化线程
+    def __init_thread_pool(self,thread_num):
+        for i in range(thread_num):
+            self.threads.append(Work(self.work_queue,self.result_queue))
+
+    #添加一项工作入队
+    def add_job(self,func, *args,**kwargs):
+      #  print "result:%s \n function:%s \n args:%s \nkwargs:%s" % (result,func,args,kwargs)
+        self.work_queue.put([func, list(args),dict(kwargs)])
+        #任务入队，Queue内部实现了同步机制
+
+
+    def check_queue(self):
+        '''检查剩余队列任务'''
+        return self.work_queue.qsize()
+    def start_queue(self):
+        for qthread in self.threads:
+            #qthread.setDaemon(True)
+            qthread.start()
+        
+    def wait_allcomplete(self):
+        '''等待所有线程运行完毕'''
+        for item in self.threads:
+            print "Thread %s:join" % item.getName()
+            if item.isAlive():
+                item.join()
+        print "wait queue join"
+        self.work_queue.join()
+
+
+
+
+class Work(threading.Thread):
+    def __init__(self, work_queue, result_queue):
+        threading.Thread.__init__(self)
+        self.work_queue = work_queue
+        self.result_queue = result_queue
+        print "Create:%s(queue:%s)" % (self.getName(),self.work_queue.qsize())
+
+      #  self.start()
+      
+      
+    def run(self):
+        #死循环，从而让创建的线程在一定条件下关闭退出
+        while True:
+            print "Run:%s" % self.getName()
+            try:
+                if not self.work_queue.empty():
+                    #任务异步出队，Queue内部实现了同步机制
+                    print "Thread:%s->qsize %s" % (self.getName(),self.work_queue.qsize())
+                    do, args,kwargs = self.work_queue.get(block=False)  
+                    self.work_queue.task_done()
+                    if callable(do):
+                        result=do(*args,**kwargs)
+                        print "!!!%s:%s" % (self.getName(),result)
+                        #self.result_queue.put_nowait(result)
+                    print ">>>%s(%s,%s)" % (do,args,kwargs)
+                    
+                else:
+                    print 'there is no item in work queue:%s' % self.getName()
+                    break
+            except Exception,e:
+                print "Thread %s Error:%s" % (self.getName(),e)
+                traceback.format_exc()
+                break
 
 
 class PizzaShell(cmd.Cmd):
@@ -124,8 +204,8 @@ class PizzaShell(cmd.Cmd):
         #return self.root.search_list(text)
 
 
-    def do_cmd(self, line):
-        if not len(line) > 0:
+    def do_cmd(self,line):
+        if not len(line)>0:
             return
         shl=shlex.shlex(line,posix=True)
         shl.whitespace_split=True
@@ -133,6 +213,7 @@ class PizzaShell(cmd.Cmd):
         optparse.add_option('-p', '--piece', type='string', help='piece name')
         optparse.add_option('--recursion', action='store_true', help='get childs  with recursion')
         optparse.add_option('-c', '--childs', action='store_true', help='get childs ')
+        optparse.add_option('--threads', action='store_true', help='get childs ')
         (opts,args)=optparse.parse_args([ i for i in shl])
         
         
@@ -142,7 +223,11 @@ class PizzaShell(cmd.Cmd):
                                              inChilds=True if opts.childs else False,
                                              useRecursion=True if opts.recursion else False,
                                              objClass=None)
-        self.__process_list(oper_list,"execute",string.join(args,';'),hide_server_info=True,hide_puts=True)
+        self.__process_list( True if opts.threads else False,
+                             oper_list,
+                             "execute",
+                             string.join(args,';'),
+                             hide_server_info=True,hide_puts=True)
         
         #print 'Server Count:%s' % len(oper_list)
         #for oper in oper_list:
@@ -196,33 +281,50 @@ class PizzaShell(cmd.Cmd):
         elif opts.run:
             pass
     def __set_prompt(self,node):
-        self.prompt= """%s%s%s%s>""" % (colors.blue("Pizza",prompt=True),
+        self.prompt= """%s%s%s%s>""" % (colors.blue("Corrin",prompt=True),
                                  '[',
                                  colors.magenta(str(node),prompt=True),
                                  ']')
              
-    def __process_list(self,inst_list,fun,*args,**kwargs):
+    def __process_list(self,use_thread,inst_list,fun,*args,**kwargs):
         results=[]
         cross_print=False
-        error_count=0
+        error_count=len(inst_list)
         elapsed_sum=0
         proc_fun=fun
+        work_manager=None
+
         try:
-            for num,instance in enumerate(inst_list):
-                proc_item=instance
-                proc_res=None
-                if hasattr(proc_item,proc_fun):
-                    proc_res=getattr(proc_item,proc_fun)(*args,**kwargs)
-                if proc_res and (not cross_print) and string.find(proc_res.result,'\n') != -1:
+            if use_thread:
+                work_manager=WorkManager(thread_num=5)
+            for instance in inst_list:
+                if instance is None:
+                    continue
+                if hasattr(instance,fun):
+                    if use_thread:
+                        work_manager.add_job(getattr(instance,proc_fun),*args,**kwargs)
+                    else:
+                        res=getattr(instance,proc_fun)(*args,**kwargs)
+                        results.append(res)
+            if use_thread:
+                work_manager.start_queue()
+                work_manager.wait_allcomplete()
+                for i in range(work_manager.result_queue.qsize()):
+                    results.append(work_manager.result_queue.get())    
+                
+            for result in results:
+                if result and (not cross_print) and string.find(result.result,'\n') != -1:
                     cross_print = True
-                if proc_res is None or proc_res.succeed == False:
-                    error_count += 1
-                if proc_res is not None:
-                    elapsed_sum += proc_res.elapsed
-                results.append([num+1,instance,proc_res])
+                #if result is None or result.succeed == False:
+                    #error_count -=1
+                if result is not None and result.succeed:
+                    elapsed_sum += result.elapsed        
+                    error_count -=1
+
             self.__print_result(results,len(inst_list),error_count,elapsed_sum,cross_print)
         except Exception,e:
             print "Error:%s" % e
+            traceback.print_exc()
         finally:
             Server.disconnect_all()
     def __print_result(self,results,inst_count,error_count,elapsed_sum,cross_print=False):
@@ -233,21 +335,29 @@ class PizzaShell(cmd.Cmd):
             res_table.align["Elapsed"]="l"
             res_table.padding_width=1
             res_table.encoding=encoding
-            for (num,instance,result) in results:
+            num=0
+            for result in results:
+                num +=1
+                if result is  None or not isinstance(result,ExecuteOut):
+                    continue
                 if result.succeed:
                     color="cyan"
                 else:
                     color="red"
                 res_table.add_row([num,
-                                   instance  if result.succeed else colors.red(str(instance)),
+                                   str(result.instance)  if result.succeed else colors.red(str(result.instance)),
                                    datetime.timedelta(seconds=result.elapsed),
                                    result.result if result.succeed else colors.red(str(result.result))
                                    ])
             print res_table
         def __print_cross(results,encoding="gbk"):
-            for (num,instance,result) in results:
+            num=0
+            for result in results:
+                num+=1
+                if result is  None or not isinstance(result,ExecuteOut):
+                    continue                
                 print "Num:%5s [%40s] Elapsed:%20s" % (num,
-                                         instance  if result.succeed else colors.red(str(instance)),
+                                         result.instance  if result.succeed else colors.red(str(result.instance)),
                                          datetime.timedelta(seconds=result.elapsed))
                 print colors.green(str(result.result)) if result.succeed else colors.red(str(result.result))
             
@@ -265,12 +375,8 @@ class PizzaShell(cmd.Cmd):
 
         
             
-    def _get_operation_list(self, node,
-            inPiece=None,
-            inCurrent=False,
-            inChilds=False,
-            useRecursion=False,
-            objClass=None):
+    def _get_operation_list(self, node, inPiece=None, inCurrent=False, inChilds=False, useRecursion=False,
+                            objClass=None):
         server_list = []
         if inPiece and self.piecis.has_key(inPiece):
             for s in self.piecis[inPiece]['servers']:
@@ -380,7 +486,11 @@ class PizzaShell(cmd.Cmd):
                     operfun()
             
 
-    @options([make_option('-a', '--add', action='store_true', help='add ipsec filter'),
+    @options([make_option('-p', '--piece', type='string', help='piece name'),
+              make_option('--recursion', action='store_true', help='get childs  with recursion'),
+              make_option('-c', '--childs', action='store_true', help='get childs '),
+              
+              make_option('-a', '--add', action='store_true', help='add ipsec filter'),
               make_option('--chain', type='choice', choices=['INPUT', 'OUTPUT', 'FORWARD'], help='protocal'),
               make_option('--source', type='string', help='source address'),
               make_option('--protocal', type='choice', choices=['tcp', 'udp', 'imcp', 'all'], help='protocal'),
@@ -393,77 +503,46 @@ class PizzaShell(cmd.Cmd):
               make_option('--reload', action='store_true', help='reload ipsec')
     ])
     def do_ipsec(self, args, opts=None):
-        cipsec = IPsec(self.server.current_node)
-        if opts.add:
-            if opts.protocal and opts.source and opts.dport:
-                cipsec.add_filter(opts.protocal, opts.source, opts.dport, args,
-                                  chain=opts.chain if opts.chain else 'INPUT')
-            else:
-                print '''Need surport correct value for those:
-        [--chain=]
-        --source=
-        --protocal=
-        --dport=
-        --description='''
-            return
-        if opts.list:
-            ripsec = cipsec.list()
-            print "%5s%8s%20s%20s  %s" % ("dbid", "Chain", 'Source', 'dport', 'description')
-            for i in ripsec:
-                print "%5s%8s%20s%20s  %s" % (i.id, i.chain, i.source_addr, i.dport, i.description)
-            return
-        if opts.script:
-            print cipsec.make_script()
-            return
-        if opts.reload:
-            print 'start reload ipsec',
-            cipsec.reload()
-            print 'ok'
-            return
-        if opts.delete:
-            ripsec = cipsec.list()
-            print "      %5s%8s%20s%20s  %s" % ("dbid", "Chain", 'Source', 'dport', 'description')
-            infolist = []
-            for i in ripsec:
-                infolist.append("%5s%8s%20s%20s  %s" % (i.id, i.chain, i.source_addr, i.dport, i.description))
-            sauce = self.select(infolist)
-            print "delete filter",
-            cipsec.del_filter(int(string.split(sauce)[0]))
-            print "ok"
-            return
-        if opts.status:
-            self.server.current_node.execute("iptables -nvL")
-            return
+        from node import IPsec
 
-    @options([
-        make_option('-p', '--piece', type='string', help='Piece name'),
-        make_option('--recursion', action='store_true', help='Get childs  with recursion'),
-        make_option('-c', '--childs', action='store_true', help='Get childs '),
-        make_option('-s', '--save', action='store_true', help='Store iptables rules from onlie server to database'),
-        make_option('-l', '--list', action='store_true', help='List online iptables'),
-        make_option('--nvL', action='store_true', help='List online iptables with "iptables -nvL" style')
-    ])
-    def do_iptables(self, args, opts=None):
-        iptables_list = self._get_operation_list(
-            self.server.current_node,
-            inPiece=opts.piece if opts.piece else None,
-            inCurrent=True,
-            inChilds=True if opts.childs else False,
-            useRecursion=True if opts.recursion else False,
-            objClass=Iptables
-        )
-        if opts.save:
-            for iptables in iptables_list:
-                iptables.save_from_server()
-            return
-        if opts.list:
-            for iptables in iptables_list:
-                iptables.server.execute('iptables-save')
-            return
-        if opts.nvL:
-            for iptables in iptables_list:
-                iptables.server.execute('iptables -vnL --line')
-            return
+        init_list = self._get_operation_list(self.server.current_node,
+                                             inPiece=opts.piece if opts.piece else None,
+                                             inCurrent=True,
+                                             inChilds=True if opts.childs else False,
+                                             useRecursion=True if opts.recursion else False,
+                                             objClass=IPsec)
+        oper = None
+        oper_param = None
+
+        password = None
+
+        if opts.add and opts.protocal and opts.source and opts.dport:
+            oper="add_filter"
+            oper_param=[opts.protocal, opts.source, opts.dport, args, 0, opts.chain if opts.chain else 'INPUT']
+        elif opts.list:
+            oper="print_list"
+            oper_param=None
+        elif opts.script:
+            oper="make_script"
+            oper_param=None
+            
+        elif opts.reload:
+            oper="reload"
+            oper_param=None  
+            
+        elif opts.delete:
+            oper=None
+            oper_param=None   
+        elif opts.status:
+            oper="status"
+            oper_param=None                   
+        for item in init_list:
+            if oper:
+                operfun = getattr(item, oper)
+                if oper_param and len(oper_param)>0:
+                    operfun(*oper_param)
+                else:
+                    operfun()           
 
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
@@ -540,6 +619,7 @@ class PizzaShell(cmd.Cmd):
               make_option('--access_key', type='string', help='piece name'),
               make_option('--secret_key', type='string', help='piece name'),
               make_option('--invalid_users', action='store_true', help='piece name'),
+              make_option('--change_hostname', action='store_true', help='piece name'),
     ])
     def do_sysinit(self, arg, opts=None):
         from node import SysInit
@@ -551,18 +631,36 @@ class PizzaShell(cmd.Cmd):
                                              inChilds=True if opts.childs else False,
                                              useRecursion=True if opts.recursion else False,
                                              objClass=SysInit)
+        oper = None
+        oper_param = None
+
         password = None
+
+        if opts.make_authorized:
+            if password is None:
+                password = getpass.getpass('Enter Login password: ')
+            oper="make_authorized"
+            oper_param=[password if len(password) > 0 else None]
+        elif opts.disable_selinux:
+            oper="disable_selinux"
+            oper_param=None
+        elif opts.amazon_change_access_key and opts.access_key and opts.secret_key:
+            oper="amazon_change_access_key"
+            oper_param=[opts.access_key, opts.secret_key]
+        elif opts.invalid_users:
+            oper="invalid_users"
+            oper_param=None    
+        elif opts.change_hostname:
+            oper="change_hostname"
+            oper_param=None   
+                
         for item in init_list:
-            if opts.make_authorized:
-                if password is None:
-                    password = getpass.getpass('Enter Login password: ')
-                item.make_authorized(password=password if len(password) > 0 else None)
-            if opts.disable_selinux:
-                item.disable_selinux()
-            if opts.amazon_change_access_key and opts.access_key and opts.secret_key:
-                item.amazon_change_access_key(opts.access_key, opts.secret_key)
-            if opts.invalid_users:
-                item.invalid_users()
+            if oper:
+                operfun = getattr(item, oper)
+                if oper_param and len(oper_param)>0:
+                    operfun(*oper_param)
+                else:
+                    operfun()        
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
               make_option('--recursion', action='store_true', help='get childs  with recursion'),
