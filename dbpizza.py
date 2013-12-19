@@ -436,10 +436,12 @@ class PizzaShell(cmd.Cmd):
             return
 
     @options([
-        make_option('-p', '--piece', type='string', help='piece name'),
-        make_option('--recursion', action='store_true', help='get childs  with recursion'),
-        make_option('-c', '--childs', action='store_true', help='get childs '),
-        make_option('-s', '--save', action='store_true', help='Store iptables rules from onlie server to database')
+        make_option('-p', '--piece', type='string', help='Piece name'),
+        make_option('--recursion', action='store_true', help='Get childs  with recursion'),
+        make_option('-c', '--childs', action='store_true', help='Get childs '),
+        make_option('-s', '--save', action='store_true', help='Store iptables rules from onlie server to database'),
+        make_option('-l', '--list', action='store_true', help='List online iptables'),
+        make_option('--nvL', action='store_true', help='List online iptables with "iptables -nvL" style')
     ])
     def do_iptables(self, args, opts=None):
         iptables_list = self._get_operation_list(
@@ -453,6 +455,14 @@ class PizzaShell(cmd.Cmd):
         if opts.save:
             for iptables in iptables_list:
                 iptables.save_from_server()
+            return
+        if opts.list:
+            for iptables in iptables_list:
+                iptables.server.execute('iptables-save')
+            return
+        if opts.nvL:
+            for iptables in iptables_list:
+                iptables.server.execute('iptables -vnL --line')
             return
 
 
