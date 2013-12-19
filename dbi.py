@@ -202,6 +202,22 @@ class t_crontab(Base):
     create_time = Column(TIMESTAMP)
     update_time = Column(TIMESTAMP)
 
+class t_iptables(Base):
+    __tablename__ = 't_iptables'
+    id = Column(Integer, primary_key=True)
+    server_id = Column(Integer)
+    trx_id = Column(VARCHAR(16))
+    trx_time = Column(TIMESTAMP) # If set this column to be generate by SQLAlchemy, be careful to set ON UPDATE PROPERTY.
+
+class t_iptables_rules(Base):
+    __tablename__ = 't_iptables_rules'
+    id = Column(Integer, primary_key=True)
+    trx_id = Column(VARCHAR(16))
+    index = Column(TINYINT)
+    table = Column(VARCHAR(16))
+    chain = Column(VARCHAR(50))
+    opt = Column(VARCHAR(150))
+    arg = Column(VARCHAR(150))
 
 #class t_mysql(Base):
     #__tablename__='t_mysql'

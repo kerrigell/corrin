@@ -16,7 +16,9 @@ from fabric.contrib.files import exists as fexists
 from fabric.state import connections
 import traceback
 import uuid as muuid
+from itertools import izip
 import pdb
+import pprint
 import string
 import ConfigParser
 import os.path
@@ -214,11 +216,10 @@ class Feature(NodeNet):
 
     def __str__(self):
         return "<%s:%s>" % (self.s.feature, self.s.detail)
-    
 
     def print_structure(self):
         print "%s+-%s" % (string.ljust('', self.level * 4), "%s---%s->%s" % (
-        self, self.foreignnode.__class__.__name__, self.foreignnode) if self.foreignnode else self)
+            self, self.foreignnode.__class__.__name__, self.foreignnode) if self.foreignnode else self)
         for i in self.childs.values():
             i.print_structure()
 
@@ -237,6 +238,7 @@ class ExecuteOut(object):
         self.instance=inst
     def __str__(self):
         return """Code: %s Result: \n%s""" % (self.return_code,self.result)
+
 class Server(NodeNet):
     """Server.s --->  sqlobject ---> TABLE:servers"""
     __nodemap__ = {}
@@ -298,6 +300,7 @@ class Server(NodeNet):
 
         root = self if (self.root == None) else self.root
         return _search(addr, root)
+
     @classmethod
     def disconnect_all(cls):
         for key in connections.keys():
@@ -678,6 +681,193 @@ chkconfig --level=2345 iptables on
         return self.server.execute(cmd)
 
 
+class Iptables_rules(object):
+    # db table class
+    __dbclass__ = None
+    # db session
+    __dbsession__ = None
+
+    #----------------------------------------------------------------------
+    @classmethod
+    def _get_dbclass(cls):
+        if cls.__dbsession__ and cls.__dbclass__:
+            return True
+        selfclassname = cls.__name__
+        dbclassname = "t_%s" % string.lower(selfclassname)
+        dbclass = None
+        dbsession = None
+        import importlib
+
+        mo = importlib.import_module('dbi')
+        if mo:
+            if hasattr(mo, dbclassname):
+                dbclass = getattr(mo, dbclassname)
+            if hasattr(mo, 'session'):
+                dbsession = getattr(mo, 'session')
+            if dbclass and dbsession:
+                cls.__dbsession__ = dbsession
+                cls.__dbclass__ = dbclass
+                return True
+            else:
+                return False
+
+    @classmethod
+    def _get_dbinfo(cls, dbid=None):
+        if not cls._get_dbclass():
+            return None
+        result = None
+
+        if dbid is not None:
+            result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.server_id == dbid).all()
+        cls.__dbsession__.close()
+        return result
+
+    def _generate_rules(self, raw_rules=None, trx_id=None):
+        try:
+            status = None
+            rules = {trx_id: []}
+            Table = None
+            for line in raw_rules:
+                line = line.strip()
+                if line.startswith('# Generated'):
+                    status = "started"
+                elif line.startswith('*'):
+                    Table = line.strip('*')
+                elif line.startswith(':'):
+                    if status == "started" and Table:
+                        Index = 0
+                        Chain = line.strip(':').split()[0]
+                        Policy = line.strip(':').split()[1]
+                        rule = {Table: {Chain: {Index: {'POLICY': Policy}}}}
+                        rules[trx_id].append(rule)
+                    else:
+                        raise "Logical errors during parsing iptables rules"
+                elif line.startswith('-'):
+                    if status == "started" and Table:
+                        Index += 1
+                        line = line.split()
+                        Chain = line[1]
+                        i = iter(line)
+                        rule = {Table: {Chain: {Index: dict(zip(i, i))}}}
+                        rules[trx_id].append(rule)
+                    else:
+                        raise "Logical errors during parsing iptables rules"
+                elif line.startswith('# Completed'):
+                    status = "Ended"
+        except:
+            pass
+        return rules
+
+    def _load_rules(self, trx_id=None):
+        pass
+
+    def __init__(self, srv, raw_rules=None, trx_id=None):
+        if srv is None:
+            raise "Server Is Null"
+        if type(srv) != Server:
+            raise "param type is not Server"
+        self.server = srv
+        self.trx_id = trx_id
+        self.rules = None
+        if raw_rules and self.trx_id:
+            self.rules = self._generate_rules(raw_rules=raw_rules, trx_id=self.trx_id)
+        elif not raw_rules and self.trx_id:
+            self.rules = self._load_rules(trx_id=self.trx_id)
+        if self.__class__.__dbsession__ is None or self.__class__.__dbclass__ is None:
+            self._get_dbclass()
+
+    def save_rules_to_db(self):
+        dbsession = self.__class__.__dbsession__
+        dbclass = self.__class__.__dbclass__
+        try:
+            for rule in self.rules[self.trx_id]:
+                for table, table_rule in rule.items():
+                    for chain, chain_rule in table_rule.items():
+                        for index, rule_args in chain_rule.items():
+                            for opt, arg in rule_args.items():
+                                dbsession.add(dbclass(
+                                    trx_id=self.trx_id,
+                                    index=index,
+                                    table=table,
+                                    chain=chain,
+                                    opt=opt,
+                                    arg=arg
+                                ))
+            dbsession.commit()
+            dbsession.close()
+        except Exception as e:
+            print "Error: %s" % e
+
+
+class Iptables(object):
+    # db table class
+    __dbclass__ = None
+    # db session
+    __dbsession__ = None
+
+    #----------------------------------------------------------------------
+    @classmethod
+    def _get_dbclass(cls):
+        if cls.__dbsession__ and cls.__dbclass__:
+            return True
+        selfclassname = cls.__name__
+        dbclassname = "t_%s" % string.lower(selfclassname)
+        dbclass = None
+        dbsession = None
+        import importlib
+
+        mo = importlib.import_module('dbi')
+        if mo:
+            if hasattr(mo, dbclassname):
+                dbclass = getattr(mo, dbclassname)
+            if hasattr(mo, 'session'):
+                dbsession = getattr(mo, 'session')
+            if dbclass and dbsession:
+                cls.__dbsession__ = dbsession
+                cls.__dbclass__ = dbclass
+                return True
+            else:
+                return False
+
+    @classmethod
+    def _get_dbinfo(cls, dbid=None):
+        if not cls._get_dbclass():
+            return None
+        result = None
+
+        if dbid is not None:
+            result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.server_id == dbid).all()
+        cls.__dbsession__.close()
+        return result
+
+    def __init__(self, srv):
+        if srv is None:
+            raise "Server Is Null"
+        if type(srv) != Server:
+            raise "param type is not Server"
+        self.server = srv
+        self.rules = None
+        if self.__class__.__dbsession__ is None or self.__class__.__dbclass__ is None:
+            self._get_dbclass()
+            self.rules = self._get_dbinfo(dbid=srv.dbid)
+
+    def save_from_server(self):
+        all_rules = self.server.execute('iptables-save', hide_puts=True, hide_server_info=True)
+        dbsession = self.__class__.__dbsession__
+        dbclass = self.__class__.__dbclass__
+        if all_rules.succeed:
+            trx_id = str(muuid.uuid4()).rsplit('-', 3)[0]
+            trx_time = time.strftime("%Y%m%d%H%M%S")
+            rules = Iptables_rules(self.server, raw_rules=all_rules.result.splitlines(True), trx_id=trx_id)
+            rules.save_rules_to_db()
+            dbsession.add(dbclass(
+                server_id=self.server.dbid,
+                trx_id=trx_id,
+                trx_time=trx_time))
+        dbsession.commit()
+        dbsession.close()
+
+
 class Nagios(object):
     config = None
     centreon = None
@@ -737,6 +927,7 @@ class Nagios(object):
                       'is_installed_utils_pm': ['tools', 'utils_pm', 'client/tools/', '/usr/local/nagios/libexec', None,
                                                 None]
     }
+
     @classmethod
     def get_config(cls):
         if cls.config is None:
