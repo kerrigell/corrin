@@ -30,6 +30,7 @@ from node import Nagios
 from node import IPsec
 from node import SysInfo
 from node import Transfer
+from node import Iptables
 from node import ExecuteOut
 
 
@@ -204,8 +205,8 @@ class PizzaShell(cmd.Cmd):
         #return self.root.search_list(text)
 
 
-    def do_cmd(self,line):
-        if not len(line)>0:
+    def do_cmd(self, line):
+        if not len(line) > 0:
             return
         shl=shlex.shlex(line,posix=True)
         shl.whitespace_split=True
@@ -543,6 +544,36 @@ class PizzaShell(cmd.Cmd):
                     operfun(*oper_param)
                 else:
                     operfun()           
+
+    @options([
+        make_option('-p', '--piece', type='string', help='Piece name'),
+        make_option('--recursion', action='store_true', help='Get childs  with recursion'),
+        make_option('-c', '--childs', action='store_true', help='Get childs '),
+        make_option('-s', '--save', action='store_true', help='Store iptables rules from onlie server to database'),
+        make_option('-l', '--list', action='store_true', help='List online iptables'),
+        make_option('--nvL', action='store_true', help='List online iptables with "iptables -nvL" style')
+    ])
+    def do_iptables(self, args, opts=None):
+        iptables_list = self._get_operation_list(
+            self.server.current_node,
+            inPiece=opts.piece if opts.piece else None,
+            inCurrent=True,
+            inChilds=True if opts.childs else False,
+            useRecursion=True if opts.recursion else False,
+            objClass=Iptables
+        )
+        if opts.save:
+            for iptables in iptables_list:
+                iptables.save_from_server()
+            return
+        if opts.list:
+            for iptables in iptables_list:
+                iptables.server.execute('iptables-save')
+            return
+        if opts.nvL:
+            for iptables in iptables_list:
+                iptables.server.execute('iptables -vnL --line')
+            return
 
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
