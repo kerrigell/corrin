@@ -27,6 +27,8 @@ import threading
 import thread
 from Queue import Queue
 
+import prettytable
+
 
 reload(sys)
 sys.setdefaultencoding('latin1')
@@ -195,8 +197,8 @@ class NodeNet(object):
             return None
         self_node = cls(fdbid, cls.__foreignclass__)
         if dbinfo.pid != 0:
-            #parent_node.add_child(self_node)
             parent_node.breed()
+            parent_node.add_child(self_node)
         return self_node
 
     def print_structure(self):
@@ -529,11 +531,60 @@ class Server(NodeNet):
         return result
 
 
-class IPsec(object):
+
+
+########################################################################
+class Operation(object):
     # db table class
     __dbclass__ = None
     # db session
-    __dbsession__ = None
+    __dbsession__ = None    
+    def __init__(self):
+        """Constructor"""
+    @classmethod
+    def get_dbclass(cls,table_name):
+        if cls.__dbsession__ and cls.__dbclass__:
+            return (cls.__dbsession__,cls.__dbclass__)        
+        if table_name is None:
+            return None
+        #if table_name is None:
+            #selfclassname = cls.__name__
+            #dbclassname = "t_%s" % string.lower(selfclassname)
+        #else:
+        dbclassname=table_name
+        dbclass = None
+        dbsession = None
+        import importlib
+        mo = importlib.import_module('dbi')
+        if mo:
+            if hasattr(mo, dbclassname):
+                dbclass = getattr(mo, dbclassname)
+            if hasattr(mo, 'session'):
+                dbsession = getattr(mo, 'session')
+            if dbclass and dbsession:
+                cls.__dbsession__ = dbsession
+                cls.__dbclass__ = dbclass
+                return (cls.__dbsession__,cls.__dbclass__)
+            else:
+                return None
+        else:
+            return None
+        
+    @classmethod
+    def get_dbinfo(cls, dbid=None):
+        if not cls.get_dbclass():
+            return None
+        result = None
+        if dbid is not None:
+            result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.server_id == dbid).all()
+        cls.__dbsession__.close()
+        return result
+        
+    
+    
+
+class IPsec(object):
+
 
     #----------------------------------------------------------------------
     @classmethod
@@ -2074,13 +2125,16 @@ class Crontab(object):
             dbsession.close()
             print '  %50s' % ('Collected the number of crontab:%s' % count)
 
-    def list(self):
+    def list(self):     
         ripsec = self._get_dbinfo(self.server.dbid)
-        print "%5s%5s%10s%5s%5s%5s %100s%10s %5s  %s" % (
-            "id", "min", 'hou', 'day', 'mon', 'wee', 'process', 'user', 'status', 'description')
+        res_table=prettytable.PrettyTable(["id", "min", 'hou', 'day', 'mon', 'wee', 'process', 'user', 'status', 'description'])
+        for col_name in ['hou','day','mon','process','description']:
+            res_table.align[col_name]='l'
+        res_table.padding_width = 1
+        res_table.encoding = self.server.encoding  
         for i in ripsec:
-            print "%5s%5s%10s%5s%5s%5s %100s%10s%5s  %s" % (
-                i.id, i.pminute, i.phour, i.pday, i.pmonth, i.pweek, i.process, i.user, i.status, i.description)
+            res_table.add_row([i.id, i.pminute, i.phour, i.pday, i.pmonth, i.pweek, i.process, i.user, i.status, i.description])
+        print res_table
 
     def _sed_reg(self, db_row):
         sed_reg = ""
@@ -2191,3 +2245,6 @@ class Crontab(object):
 # "wget --no-check-certificate -O - http://bootstrap.saltstack.org | sh"  
 #"sed -i '/^\#master: /s/^.*$/master: syndic.vn.salt.cyoper/g' /etc/salt/minion && echo '10.6.6.42  syndic.vn.salt.cyoper'>> /etc/hosts"  
 # "/etc/init.d/salt-minion restart"
+
+#后来发现scp这东西应该属于openssh-clients这个包，运行：
+#yum install openssh-clients

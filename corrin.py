@@ -371,10 +371,11 @@ class PizzaShell(cmd.Cmd):
         if inPiece and self.piecis.has_key(inPiece):
             for s in self.piecis[inPiece]['servers']:
                 server_list.append(s)
-        if inChilds:
-            server_list += node.get_childs(useRecursion)
-        if inCurrent:
-            server_list.append(node)
+        else:
+            if inChilds:
+                server_list += node.get_childs(useRecursion)
+            if inCurrent:
+                server_list.append(node)
         object_list = []
         if objClass:
             object_list = [objClass(i) for i in server_list]
