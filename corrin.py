@@ -510,7 +510,7 @@ class PizzaShell(cmd.Cmd):
             oper = "add_filter"
             oper_param = [opts.protocal, opts.source, opts.dport, args, 0, opts.chain if opts.chain else 'INPUT']
         elif opts.list:
-            oper = "print_list"
+            oper = "print_filter"
             oper_param = None
         elif opts.script:
             oper = "make_script"

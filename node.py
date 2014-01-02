@@ -148,8 +148,11 @@ class NodeNet(object):
             if cdbid is None or cdbid == 0:
                 return cls.current_node
             else:
-                if cdbid is not None and cdbid != 0 and cls.current_node.childs.has_key(cdbid):
-                    cnode = cls.current_node.childs[cdbid]
+                if cdbid is not None and cdbid != 0:
+                    if cls.current_node.childs.has_key(cdbid):
+                        cnode = cls.current_node.childs[cdbid]
+                    else:
+                        cnode=cls.get_node(cdbid)
         if cnode.childs is None:
             cnode.breed()
         cls.current_node = cnode
@@ -534,16 +537,26 @@ class Server(NodeNet):
 
 
 ########################################################################
+####http://blog.csdn.net/treesky/article/details/7088284###
+__metaclass__ = type
 class Operation(object):
     # db table class
     __dbclass__ = None
     # db session
-    __dbsession__ = None    
-    def __init__(self):
+    __dbsession__ = None  
+    # server instance
+    server = None
+    def __init__(self,server,table_name=None):
         """Constructor"""
+    #    pdb.set_trace()
+        if not isinstance(server,Server):
+            raise Exception("Init Error: %s is not <Server> instance" % str(server))
+        self.server=server
+        if self.__dbclass__ is None and self.__dbsession__ is None:
+            self.get_dbclass(table_name)
     @classmethod
-    def get_dbclass(cls,table_name):
-        if cls.__dbsession__ and cls.__dbclass__:
+    def get_dbclass(cls,table_name=None):
+        if cls.__dbsession__ is not None and cls.__dbclass__ is not None:
             return (cls.__dbsession__,cls.__dbclass__)        
         if table_name is None:
             return None
@@ -570,73 +583,27 @@ class Operation(object):
         else:
             return None
         
-    @classmethod
-    def get_dbinfo(cls, dbid=None):
-        if not cls.get_dbclass():
-            return None
-        result = None
-        if dbid is not None:
-            result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.server_id == dbid).all()
-        cls.__dbsession__.close()
+  #  @classmethod
+    def get_dbinfo(self, dbid=None):
+        try:
+            dbsession,dbclass = self.get_dbclass()
+        except Exception,e:
+            return  None
+        #if dbid is not None:
+        result = dbsession.query(dbclass).filter(dbclass.server_id == self.server.dbid).all()
+        dbsession.close()
         return result
         
     
     
 
-class IPsec(object):
-
-
-    #----------------------------------------------------------------------
-    @classmethod
-    def _get_dbclass(cls):
-        if cls.__dbsession__ and cls.__dbclass__:
-            return True
-        selfclassname = cls.__name__
-        dbclassname = "t_%s" % string.lower(selfclassname)
-        dbclass = None
-        dbsession = None
-        import importlib
-
-        mo = importlib.import_module('dbi')
-        if mo:
-            if hasattr(mo, dbclassname):
-                dbclass = getattr(mo, dbclassname)
-            if hasattr(mo, 'session'):
-                dbsession = getattr(mo, 'session')
-            if dbclass and dbsession:
-                cls.__dbsession__ = dbsession
-                cls.__dbclass__ = dbclass
-                return True
-            else:
-                return False
-
-    @classmethod
-    def _get_dbinfo(cls, dbid=None):
-        if not cls._get_dbclass():
-            return None
-        result = None
-
-        if dbid is not None:
-            result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.server_id == dbid).all()
-        cls.__dbsession__.close()
-        return result
-
-    def __init__(self, srv):
-        if srv is None: raise "Server Is Null"
-        if type(srv) != Server:
-            raise "param type is not Server"
-        self.server = srv
-        if self.__class__.__dbsession__ is None or self.__class__.__dbclass__ is None:
-            self._get_dbclass()
-            # 需要重载赋值，实现从已有map中恢复实例
-            #if self.__class__.__nodemap__.has_key(dbid) and isinstance(self.__class__.__nodemap__[dbid],self.__class__):
-            #self=self.__class__.__nodemap__[dbid]
-            #return
-            #self.s=self._get_dbinfo(self.server.dbid)
+class IPsec(Operation):
+    def __init__(self, server):
+      #  Operation.__init__(self,server,"t_%s" % string.lower(self.__class__.__name__))
+        super(IPsec, self).__init__(server, "t_%s" % string.lower(self.__class__.__name__))
 
     def add_filter(self, protocal, source_addr, dport, description, status=0, chain='INPUT'):
-        dbsession = self.__class__.__dbsession__
-        dbclass = self.__class__.__dbclass__
+        dbsession,dbclass = self.get_dbclass()
         dbsession.add(dbclass(server_id=self.server.dbid,
                               protocal=protocal,
                               source_addr=source_addr,
@@ -649,34 +616,27 @@ class IPsec(object):
         dbsession.close()
 
     def del_filter(self, dbid):
-    #ripsec = cipsec.list()
-    #print "      %5s%8s%20s%20s  %s" % ("dbid", "Chain", 'Source', 'dport', 'description')
-    #infolist = []
-    #for i in ripsec:
-    #infolist.append("%5s%8s%20s%20s  %s" % (i.id, i.chain, i.source_addr, i.dport, i.description))
-        #sauce = self.select(infolist)
-        #print "delete filter",
-        #cipsec.del_filter(int(string.split(sauce)[0]))
-        #print "ok"        
-
-
-        dbsession = self.__class__.__dbsession__
-        dbclass = self.__class__.__dbclass__
+        dbsession,dbclass = self.get_dbclass()
         for instance in dbsession.query(dbclass).filter_by(id=dbid):
             dbsession.delete(instance)
         dbsession.commit()
         dbsession.close()
 
-    def list(self):
-        return self.__class__._get_dbinfo(self.server.dbid)
+    def print_filter(self):
+        res_title=["dbid", "chain", 'source', 'dport', 'description']
+        res_list = self.get_dbinfo()
+        res_table=prettytable.PrettyTable(res_title)
+        for col_name in res_title[1:]:
+            res_table.align[col_name]='l'
+        res_table.padding_width = 1
+        res_table.encoding = self.server.encoding  
+        for i in res_list:
+            res_table.add_row([i.id, i.chain, i.source_addr, i.dport, i.description])
+        print res_table        
 
-    def print_list(self):
-        print "%5s%8s%20s%20s  %s" % ("dbid", "Chain", 'Source', 'dport', 'description')
-        for i in self.list():
-            print "%5s%8s%20s%20s  %s" % (i.id, i.chain, i.source_addr, i.dport, i.description)
 
     def make_script(self):
-        ripsec = self.list()
+        ripsec = self.get_dbinfo()
         filterlist = ''
         if self.server.parent is not None:
             if self.server.parent.s.ip_public is None or self.server.parent.s.ip_private is None:
@@ -728,7 +688,7 @@ chkconfig --level=2345 iptables on
     def reload(self):
         script = self.make_script()
         if script:
-            self.server.execute(self.make_script())
+            self.server.execute(script)
 
     def status(self):
         cmd = "iptables -nvL"
