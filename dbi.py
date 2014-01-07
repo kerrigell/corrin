@@ -6,10 +6,11 @@
 import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, BigInteger, VARCHAR, Text, DateTime, DATETIME, SMALLINT, TIMESTAMP
+from sqlalchemy import Column, Integer, BigInteger, VARCHAR, Text, DateTime, DATETIME, SMALLINT, TIMESTAMP, Boolean
 from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.types import SchemaType, TypeDecorator, Enum
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql.expression import text
 import ConfigParser
 import time, datetime
 import sys, os.path
@@ -37,6 +38,7 @@ session = Session()
 
 class t_region(Base):
     __tablename__ = 't_region'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     code = Column(VARCHAR(3))
     name = Column(VARCHAR(50))
@@ -44,6 +46,7 @@ class t_region(Base):
 
 class t_product(Base):
     __tablename__ = 't_product'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     code = Column(VARCHAR(20))
     name = Column(VARCHAR(50))
@@ -51,23 +54,24 @@ class t_product(Base):
 
 class t_server(Base):
     __tablename__ = 't_server'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     __searchword__ = None
     id = Column(Integer, primary_key=True)
-    pid = Column(Integer)
+    pid = Column(Integer, nullable=True)
     # 记录上层硬件所属ID，用途：虚拟机-》物理机
-    mid = Column(Integer)
+    mid = Column(Integer, nullable=True)
     region = Column(Enum('hk', 'vn', 'id', 'in', 'tw', 'th', 'us', 'my', 'cn'))
     product = Column(
         Enum('tlbb', 'ldj', 'taoyuan', 'guyu', 'totem', 'specialforce', 'gamefuse', 'oppaplay', 'gamiction', 'cuaban',
              'davinci', 'swordgirls', 'zszw', 'common', 'pengyou'))
     role = Column(Enum('cc', 'backup', 'db'))
-    loginuser = Column(VARCHAR(40))
+    loginuser = Column(VARCHAR(40), server_default='root')
     description = Column(VARCHAR(250))
     ip_oper = Column(VARCHAR(16))
     ip_private = Column(VARCHAR(16))
     ip_public = Column(VARCHAR(16))
     ip_ilo = Column(VARCHAR(16))
-    is_reserve = Column(TINYINT(1))
+    is_reserve = Column(Boolean, server_default='0')
     dbms = Column(Enum('MySQL', 'Oracle', 'MSSQL'))
     vender = Column(Enum('Dell', 'HP', 'VMware', 'Intel', 'Xen'))
     model = Column(VARCHAR(100))
@@ -77,8 +81,10 @@ class t_server(Base):
     ip_monitor = Column(VARCHAR(16))
     ip_ntp_server = Column(VARCHAR(16))
     serial = Column(VARCHAR(50))
-    is_online = Column(TINYINT(1))
-    is_deleted = Column(TINYINT(1))
+    is_online = Column(Boolean, server_default='0')
+    update_time = Column(TIMESTAMP, server_default=text('0 ON UPDATE CURRENT_TIMESTAMP'))
+    create_time = Column(TIMESTAMP, server_default=text('0'))
+    is_deleted = Column(Boolean)
 
     def __repr__(self):
         return "<Server('%s','%s','%s')>" % (self.region, self.product, self.ip_oper)
@@ -136,6 +142,7 @@ class t_server(Base):
 
 class t_feature(Base):
     __tablename__ = 't_feature'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     pid = Column(Integer)
     feature = Column(VARCHAR(50))
@@ -145,6 +152,7 @@ class t_feature(Base):
 
 class t_ipsec(Base):
     __tablename__ = 't_ipsec'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     chain = Column(Enum('INPUT', 'OUTPUT', 'FORWARD'))
@@ -155,6 +163,7 @@ class t_ipsec(Base):
     #
     status = Column(Integer)
     description = Column(VARCHAR(100))
+    # 老马看到这里的时候看看这两个字段的字段名能不能和其他表的写法统一下
     createdate = Column(DATETIME)
     modifydate = Column(DATETIME)
 
@@ -173,6 +182,7 @@ class t_ipsec(Base):
 
 class t_sysinfo(Base):
     __tablename__ = 't_sysinfo'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     need_id = Column(Integer)
     need_value = Column(VARCHAR(50))
@@ -186,6 +196,7 @@ class t_sysinfo(Base):
 
 class t_crontab(Base):
     __tablename__ = 't_crontab'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     pminute = Column(VARCHAR(20))
@@ -205,15 +216,16 @@ class t_crontab(Base):
 
 class t_iptables(Base):
     __tablename__ = 't_iptables'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     trx_id = Column(VARCHAR(16))
-    trx_time = Column(
-        TIMESTAMP) # If set this column to be generate by SQLAlchemy, be careful to set ON UPDATE PROPERTY.
+    trx_time = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP')) 
 
 
 class t_iptables_rules(Base):
     __tablename__ = 't_iptables_rules'
+    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     trx_id = Column(VARCHAR(16))
     index = Column(TINYINT)
@@ -222,6 +234,4 @@ class t_iptables_rules(Base):
     opt = Column(VARCHAR(150))
     arg = Column(VARCHAR(150))
 
-#class t_mysql(Base):
-#__tablename__='t_mysql'
-#id = Column(Integer, primary_key=True)
+Base.metadata.create_all(engine)
