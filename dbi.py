@@ -142,9 +142,9 @@ class BaseModel(Base):
 
 
 def init_db():
-    Base.metadata.create_all(engine)
+    BaseModel.metadata.create_all(engine)
 def drop_db():
-    Base.metadata.drop_all(engine)
+    BaseModel.metadata.drop_all(engine)
 
 class t_region(BaseModel):
     __tablename__ = 't_region'
@@ -157,7 +157,6 @@ class t_region(BaseModel):
 
 class t_product(BaseModel):
     __tablename__ = 't_product'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     code = Column(VARCHAR(20))
     name = Column(VARCHAR(50))
@@ -165,7 +164,6 @@ class t_product(BaseModel):
 
 class t_server(BaseModel):
     __tablename__ = 't_server'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     __searchword__ = None
     id = Column(Integer, primary_key=True)
     pid = Column(Integer, nullable=True)
@@ -253,7 +251,6 @@ class t_server(BaseModel):
 
 class t_feature(BaseModel):
     __tablename__ = 't_feature'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     pid = Column(Integer)
     feature = Column(VARCHAR(50))
@@ -263,7 +260,6 @@ class t_feature(BaseModel):
 
 class t_ipsec(BaseModel):
     __tablename__ = 't_ipsec'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     chain = Column(Enum('INPUT', 'OUTPUT', 'FORWARD'))
@@ -293,7 +289,6 @@ class t_ipsec(BaseModel):
 
 class t_sysinfo(BaseModel):
     __tablename__ = 't_sysinfo'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     need_id = Column(Integer)
     need_value = Column(VARCHAR(50))
@@ -307,7 +302,6 @@ class t_sysinfo(BaseModel):
 
 class t_crontab(BaseModel):
     __tablename__ = 't_crontab'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     pminute = Column(VARCHAR(20))
@@ -327,7 +321,6 @@ class t_crontab(BaseModel):
 
 class t_iptables(BaseModel):
     __tablename__ = 't_iptables'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     trx_id = Column(VARCHAR(16))
@@ -336,7 +329,6 @@ class t_iptables(BaseModel):
 
 class t_iptables_rules(BaseModel):
     __tablename__ = 't_iptables_rules'
-    __table_args__ = {'mysql_engine': 'InnoDB'}
     id = Column(Integer, primary_key=True)
     trx_id = Column(VARCHAR(16))
     index = Column(TINYINT)
@@ -345,4 +337,5 @@ class t_iptables_rules(BaseModel):
     opt = Column(VARCHAR(150))
     arg = Column(VARCHAR(150))
 
-Base.metadata.create_all(engine)
+#这样写会不会每次调用模块都会被调用，相同的功能添加到init_db()中了
+#Base.metadata.create_all(engine)
