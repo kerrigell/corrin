@@ -32,24 +32,140 @@ def _get_db_string():
 engine = create_engine(_get_db_string(), pool_size=4, pool_recycle=10, max_overflow=10)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
+
 session = Session()
 
+class BaseModel(Base):
+    __abstract__ = True
+    __table_args__ = {
+        'mysql_engine':'InnoDB',
+        'mysql_charset':'utf8'
+        }    
+    @classmethod
+    def get_by_id(cls, session, id, columns=None, lock_mode=None):
+        if hasattr(cls, 'id'):
+            scalar = False
+            if columns:
+                if isinstance(columns, (tuple, list)):
+                    query = session.query(*columns)
+                else:
+                    scalar = True
+                    query = session.query(columns)
+            else:
+                query = session.query(cls)
+            if lock_mode:
+                query = query.with_lockmode(lock_mode)
+            query = query.filter(cls.id == id)
+            if scalar:
+                return query.scalar()
+            return query.first()
+        return None
+    @classmethod
+    def get_by_serverid(cls, session, server_id, columns=None, lock_mode=None):
+        if hasattr(cls, 'server_id'):
+            scalar = False
+            if columns:
+                if isinstance(columns, (tuple, list)):
+                    query = session.query(*columns)
+                else:
+                    scalar = True
+                    query = session.query(columns)
+            else:
+                query = session.query(cls)
+            if lock_mode:
+                query = query.with_lockmode(lock_mode)
+            query = query.filter(cls.server_id == server_id)
+            if scalar:
+                return query.scalar()
+            return query.first()
+        return None
 
-class t_region(Base):
+    @classmethod
+    def get_all(cls, session, columns=None, offset=None, limit=None, order_by=None, lock_mode=None):
+        if columns:
+            if isinstance(columns, (tuple, list)):
+                query = session.query(*columns)
+            else:
+                query = session.query(columns)
+                if isinstance(columns, str):
+                    query = query.select_from(cls)
+        else:
+            query = session.query(cls)
+        if order_by is not None:
+            if isinstance(order_by, (tuple, list)):
+                query = query.order_by(*order_by)
+            else:
+                query = query.order_by(order_by)
+        if offset:
+            query = query.offset(offset)
+        if limit:
+            query = query.limit(limit)
+        if lock_mode:
+            query = query.with_lockmode(lock_mode)
+        return query.all()
+
+
+    @classmethod
+    def count_all(cls, session, lock_mode=None):
+        query = session.query(func.count('*')).select_from(cls)
+        if lock_mode:
+            query = query.with_lockmode(lock_mode)
+        return query.scalar()
+
+
+    @classmethod
+    def exist(cls, session, id, lock_mode=None):
+        if hasattr(cls, 'id'):
+            query = session.query(func.count('*')).select_from(cls).filter(cls.id == id)
+            if lock_mode:
+                query = query.with_lockmode(lock_mode)
+            return query.scalar() > 0
+        return False
+
+
+    @classmethod
+    def set_attr(cls, session, id, attr, value):
+        if hasattr(cls, 'id'):
+            session.query(cls).filter(cls.id == id).update({
+                attr: value
+            })
+            session.commit()
+
+
+    @classmethod
+    def set_attrs(cls, session, id, attrs):
+        if hasattr(cls, 'id'):
+            session.query(cls).filter(cls.id == id).update(attrs)
+            session.commit()
+
+
+
+def init_db():
+    Base.metadata.create_all(engine)
+def drop_db():
+    Base.metadata.drop_all(engine)
+
+class t_region(BaseModel):
     __tablename__ = 't_region'
+    #MySQL 5.5 开始支持存储 4 字节的 UTF-8 编码的字符了，iOS 里自带的 emoji（如 🍎 字符）就属于这种。
+    #如果是对表来设置的话，可以把上面代码中的 utf8 改成 utf8mb4，DB_CONNECT_STRING 里的 charset 也这样更改。
+    __table_args__ = {
+        'mysql_engine':'InnoDB',
+        'mysql_charset':'utf8'
+        }
     id = Column(Integer, primary_key=True)
     code = Column(VARCHAR(3))
     name = Column(VARCHAR(50))
 
 
-class t_product(Base):
+class t_product(BaseModel):
     __tablename__ = 't_product'
     id = Column(Integer, primary_key=True)
     code = Column(VARCHAR(20))
     name = Column(VARCHAR(50))
 
 
-class t_server(Base):
+class t_server(BaseModel):
     __tablename__ = 't_server'
     __searchword__ = None
     id = Column(Integer, primary_key=True)
@@ -134,7 +250,7 @@ class t_server(Base):
             return 0
 
 
-class t_feature(Base):
+class t_feature(BaseModel):
     __tablename__ = 't_feature'
     id = Column(Integer, primary_key=True)
     pid = Column(Integer)
@@ -143,7 +259,7 @@ class t_feature(Base):
     server_id = Column(Integer)
 
 
-class t_ipsec(Base):
+class t_ipsec(BaseModel):
     __tablename__ = 't_ipsec'
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
@@ -171,7 +287,7 @@ class t_ipsec(Base):
         self.modifydate = datetime.datetime.now()
 
 
-class t_sysinfo(Base):
+class t_sysinfo(BaseModel):
     __tablename__ = 't_sysinfo'
     id = Column(Integer, primary_key=True)
     need_id = Column(Integer)
@@ -184,7 +300,7 @@ class t_sysinfo(Base):
     record_field = Column(VARCHAR(50))
 
 
-class t_crontab(Base):
+class t_crontab(BaseModel):
     __tablename__ = 't_crontab'
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
@@ -203,7 +319,7 @@ class t_crontab(Base):
     update_time = Column(TIMESTAMP)
 
 
-class t_iptables(Base):
+class t_iptables(BaseModel):
     __tablename__ = 't_iptables'
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
@@ -212,7 +328,7 @@ class t_iptables(Base):
         TIMESTAMP) # If set this column to be generate by SQLAlchemy, be careful to set ON UPDATE PROPERTY.
 
 
-class t_iptables_rules(Base):
+class t_iptables_rules(BaseModel):
     __tablename__ = 't_iptables_rules'
     id = Column(Integer, primary_key=True)
     trx_id = Column(VARCHAR(16))

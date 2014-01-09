@@ -621,10 +621,35 @@ class IPsec(Operation):
             dbsession.delete(instance)
         dbsession.commit()
         dbsession.close()
+    def get_filters(self):
+        exec_result=self.server.execute("iptables-save", hide_puts=True, hide_server_info=True)
+        if exec_result.succeed:
+            dbsession,dbclass = self.get_dbclass()
+            for line in exec_result.result.splitlines(True):
+                if not  line.startswith('-A'):
+                    continue
+                line=iter(line.strip().split())
+                line=dict(zip(line,line))
+                if  (line.has_key('-m') and line['-m'] == 'state') and line.has_key('--state'):
+                    continue
+                if line['-j'] == 'ACCEPT':
+                    self.add_filter(line['-p']  if line.has_key('-p') else 'all',
+                                    line['-s'],
+                                    line['--dports'] if line.has_key('--dports') else None ,
+                                    None,
+                                    1,
+                                    line['-A'])
+            print "Collect from %s: Finished" % self.server
+        else:
+            print "Collect from %s: Failed -> %s" % (self.server,exec_result.result)
+    def clear_filters(self):
+        dbsession,dbclass = self.get_dbclass()
+ 
 
     def print_filter(self):
         res_title=["dbid", "chain", 'source', 'dport', 'description']
         res_list = self.get_dbinfo()
+        
         res_table=prettytable.PrettyTable(res_title)
         for col_name in res_title[1:]:
             res_table.align[col_name]='l'
@@ -632,6 +657,7 @@ class IPsec(Operation):
         res_table.encoding = self.server.encoding  
         for i in res_list:
             res_table.add_row([i.id, i.chain, i.source_addr, i.dport, i.description])
+        
         print res_table        
 
 

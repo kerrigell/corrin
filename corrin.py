@@ -488,6 +488,7 @@ class PizzaShell(cmd.Cmd):
               #    make_option('--description',type='string',help='filter description'),
               make_option('-d', '--delete', action='store_true', help='delete ipsec filter'),
               make_option('-l', '--list', action='store_true', help='list ipsec'),
+              make_option('--collect', action='store_true', help='collect ipsec from server'),
               make_option('--script', action='store_true', help='show  ipsec script'),
               make_option('--status', action='store_true', help='show  current ipsec status'),
               make_option('--reload', action='store_true', help='reload ipsec')
@@ -519,7 +520,9 @@ class PizzaShell(cmd.Cmd):
         elif opts.reload:
             oper = "reload"
             oper_param = None
-
+        elif opts.collect:
+            oper="get_filters"
+            oper_param=None
         elif opts.delete:
             oper = None
             oper_param = None
