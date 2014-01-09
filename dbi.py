@@ -271,8 +271,8 @@ class t_ipsec(BaseModel):
     status = Column(Integer)
     description = Column(VARCHAR(100))
     # 老马看到这里的时候看看这两个字段的字段名能不能和其他表的写法统一下
-    createdate = Column(DATETIME)
-    modifydate = Column(DATETIME)
+    create_time = Column(DATETIME)
+    modify_time = Column(DATETIME)
 
     def __init__(self, server_id, protocal, source_addr, dport, description, status=0, chain='INPUT'):
         self.chain = chain
@@ -283,8 +283,8 @@ class t_ipsec(BaseModel):
         self.dport = dport
         self.status = status
         self.description = description
-        self.createdate = datetime.datetime.now()
-        self.modifydate = datetime.datetime.now()
+        self.create_time = datetime.datetime.now()
+        self.modify_time = datetime.datetime.now()
 
 
 class t_sysinfo(BaseModel):
