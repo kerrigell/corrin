@@ -42,7 +42,7 @@ class WorkManager(object):
     #初始化线程
     def __init_thread_pool(self, thread_num):
         for i in range(thread_num):
-            self.threads.append(Work(self.work_queue, self.result_queue))
+            self.threads.append(Worker(self.work_queue, self.result_queue))
 
     #添加一项工作入队
     def add_job(self, func, *args, **kwargs):
@@ -57,25 +57,27 @@ class WorkManager(object):
 
     def start_queue(self):
         for qthread in self.threads:
-            #qthread.setDaemon(True)
+            # 将所有的线程都设置为Deamon，确保当主程序退出时，所有线程也会一并退出
+            qthread.setDaemon(True)
             qthread.start()
 
     def wait_allcomplete(self):
-        '''等待所有线程运行完毕'''
+        # 先保证队列中的所有任务都被 get 到了
+        self.work_queue.join()
+        # 然后确保所有的 Thread 都执行完任务了
         for item in self.threads:
-            print "Thread %s:join" % item.getName()
+            # print "Thread %s:join" % item.getName()
             if item.isAlive():
                 item.join()
-        print "wait queue join"
-        self.work_queue.join()
+        # print "wait queue join"
 
 
-class Work(threading.Thread):
+class Worker(threading.Thread):
     def __init__(self, work_queue, result_queue):
         threading.Thread.__init__(self)
         self.work_queue = work_queue
         self.result_queue = result_queue
-        print "Create:%s(queue:%s)" % (self.getName(), self.work_queue.qsize())
+        # print "Create:%s(queue:%s)" % (self.getName(), self.work_queue.qsize())
 
         #  self.start()
 
@@ -83,21 +85,22 @@ class Work(threading.Thread):
     def run(self):
         #死循环，从而让创建的线程在一定条件下关闭退出
         while True:
-            print "Run:%s" % self.getName()
+            # print "Run:%s" % self.getName()
             try:
+                # 确保队列处理完毕后，线程会自行退出
                 if not self.work_queue.empty():
-                    #任务异步出队，Queue内部实现了同步机制
-                    print "Thread:%s->qsize %s" % (self.getName(), self.work_queue.qsize())
-                    do, args, kwargs = self.work_queue.get(block=False)
+                #任务异步出队，Queue内部实现了同步机制
+                    # print "Thread:%s->qsize %s" % (self.getName(), self.work_queue.qsize())
+                    do, args, kwargs = self.work_queue.get()
                     self.work_queue.task_done()
                     if callable(do):
                         result = do(*args, **kwargs)
-                        print "!!!%s:%s" % (self.getName(), result)
+                        # print "!!!%s:%s" % (self.getName(), result)
                         #self.result_queue.put_nowait(result)
-                    print ">>>%s(%s,%s)" % (do, args, kwargs)
-
+                        self.result_queue.put(result)
+                    # print ">>>%s(%s,%s)" % (do, args, kwargs)
                 else:
-                    print 'there is no item in work queue:%s' % self.getName()
+                    # print 'there is no item in work queue:%s' % self.getName()
                     break
             except Exception, e:
                 print "Thread %s Error:%s" % (self.getName(), e)
@@ -301,7 +304,10 @@ class PizzaShell(cmd.Cmd):
                 work_manager.start_queue()
                 work_manager.wait_allcomplete()
                 for i in range(work_manager.result_queue.qsize()):
-                    results.append(work_manager.result_queue.get())
+                    # results.append(work_manager.result_queue.get())
+                    one_result = work_manager.result_queue.get()
+                    results.append(one_result)
+                    work_manager.result_queue.task_done()
 
             for result in results:
                 if result and (not cross_print) and string.find(result.result, '\n') != -1:
