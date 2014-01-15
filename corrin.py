@@ -319,7 +319,7 @@ class PizzaShell(cmd.Cmd):
                     error_count -= 1
 
             self.__print_result(results, len(inst_list), error_count, elapsed_sum, cross_print)
-            os.system('reset')
+            os.system('stty sane')
         except Exception, e:
             print "Error:%s" % e
             traceback.print_exc()
