@@ -437,7 +437,7 @@ class Shell(cmd.Cmd):
                                                 objClass=Nagios)
 
         oper = None
-        oper_param = None
+        oper_param = []
 
         if opts.step:
             sauce = self.select([x[0] for x in Nagios.operation_step], 'Please choice what you want?')
@@ -447,7 +447,7 @@ class Shell(cmd.Cmd):
                 if oper == 'update_nrpe':
                     nrpt_item = raw_input('Please give the name of nrpe:')
                     if nrpt_item:
-                        oper_param = [nrpt_item]
+                        oper_param =[nrpt_item]
                 if oper == 'deploy_script' or oper == 'upgrade_perl' or oper == 'install_tools':
                     force_install = raw_input('Force install tools?(yes|no)')
                     if force_install == 'yes':
@@ -478,13 +478,6 @@ class Shell(cmd.Cmd):
 
         elif opts.del_from_centreon:
             oper = 'del_from_centreon'
-        #for item in monitor_list:
-            #if oper:
-                #operfun = getattr(item, oper)
-                #if oper_param and len(oper_param) > 0:
-                    #operfun(*oper_param)
-                #else:
-                    #operfun()
         self.__process_list(False,
                             True if hasattr(opts,"threads") and opts.threads else False,
                             monitor_list,
