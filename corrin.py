@@ -108,7 +108,7 @@ class Worker(threading.Thread):
                 break
 
 
-class PizzaShell(cmd.Cmd):
+class Shell(cmd.Cmd):
     def __init__(self):
         cmd.Cmd.__init__(self)
         self.centerid = None
@@ -216,7 +216,8 @@ class PizzaShell(cmd.Cmd):
                                              inChilds=True if opts.childs else False,
                                              useRecursion=True if opts.recursion else False,
                                              objClass=None)
-        self.__process_list(True if opts.threads else False,
+        self.__process_list(True,
+                            True if opts.threads else False,
                             oper_list,
                             "execute",
                             string.join(args, ';'),
@@ -280,13 +281,14 @@ class PizzaShell(cmd.Cmd):
                                          colors.magenta(str(node), prompt=True),
                                          ']')
 
-    def __process_list(self, use_thread, inst_list, fun, *args, **kwargs):
+    def __process_list(self,use_format, use_thread, inst_list, fun,*args, **kwargs):
         results = []
         cross_print = False
         error_count = len(inst_list)
         elapsed_sum = 0
         proc_fun = fun
         work_manager = None
+        
 
         try:
             if use_thread:
@@ -294,6 +296,8 @@ class PizzaShell(cmd.Cmd):
             for instance in inst_list:
                 if instance is None:
                     continue
+                if not  use_format:
+                    print colors.magenta( str(getattr(instance,"server") if hasattr(instance,"server") else instance), prompt=False)                
                 if hasattr(instance, fun):
                     if use_thread:
                         work_manager.add_job(getattr(instance, proc_fun), *args, **kwargs)
@@ -318,7 +322,7 @@ class PizzaShell(cmd.Cmd):
                     elapsed_sum += result.elapsed
                     error_count -= 1
 
-            self.__print_result(results, len(inst_list), error_count, elapsed_sum, cross_print)
+            if use_format: self.__print_result(results, len(inst_list), error_count, elapsed_sum, cross_print)
             os.system('stty sane')
         except Exception, e:
             print "Error:%s" % e
@@ -474,13 +478,18 @@ class PizzaShell(cmd.Cmd):
 
         elif opts.del_from_centreon:
             oper = 'del_from_centreon'
-        for item in monitor_list:
-            if oper:
-                operfun = getattr(item, oper)
-                if oper_param and len(oper_param) > 0:
-                    operfun(*oper_param)
-                else:
-                    operfun()
+        #for item in monitor_list:
+            #if oper:
+                #operfun = getattr(item, oper)
+                #if oper_param and len(oper_param) > 0:
+                    #operfun(*oper_param)
+                #else:
+                    #operfun()
+        self.__process_list(False,
+                            True if hasattr(opts,"threads") and opts.threads else False,
+                            monitor_list,
+                            oper,
+                            *oper_param)        
 
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
@@ -869,9 +878,9 @@ class Logger(object):
 
 def main():
     if len(sys.argv) > 1:
-        PizzaShell().onecmd(' '.join(sys.argv[1:]))
+        Shell().onecmd(' '.join(sys.argv[1:]))
     else:
-        PizzaShell().cmdloop()
+        Shell().cmdloop()
 
 
 if __name__ == '__main__':

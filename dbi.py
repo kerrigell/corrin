@@ -270,7 +270,6 @@ class t_ipsec(BaseModel):
     #
     status = Column(Integer)
     description = Column(VARCHAR(100))
-    # 老马看到这里的时候看看这两个字段的字段名能不能和其他表的写法统一下
     create_time = Column(DATETIME)
     modify_time = Column(DATETIME)
 
