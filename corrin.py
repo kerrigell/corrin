@@ -591,6 +591,8 @@ class PizzaShell(cmd.Cmd):
             print item.server
             if opts.check_all:
                 item.check_all(do_update=True if opts.update else False)
+            else:
+                item.check_less(do_update=True if opts.update else False)
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
               make_option('--recursion', action='store_true', help='get childs  with recursion'),

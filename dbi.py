@@ -185,11 +185,11 @@ class t_server(BaseModel):
     vender = Column(Enum('Dell', 'HP', 'VMware', 'Intel', 'Xen'))
     model = Column(VARCHAR(100))
     os_type = Column(Enum('Linux', 'Windows'))
-    os_release = Column(Enum('RHEL_5_3', 'RHEL_4_8', 'RHEL_4_6', 'CENT_6_3', 'WIN2003', 'WIN2008'))
-    os_arch = Column(Enum('x86_64', 'i386'))
+    os_release = Column(VARCHAR(100))
+    os_arch = Column(Enum('x86_64', 'i686', 'i386'))
     ip_monitor = Column(VARCHAR(16))
     ip_ntp_server = Column(VARCHAR(16))
-    serial = Column(VARCHAR(50))
+    serial = Column(VARCHAR(100))
     is_online = Column(Boolean, server_default='0')
     update_time = Column(TIMESTAMP, server_default=text('0 ON UPDATE CURRENT_TIMESTAMP'))
     create_time = Column(TIMESTAMP, server_default=text('0'))
@@ -242,6 +242,7 @@ class t_server(BaseModel):
     def update_value(self, col, value):
         if hasattr(self, col):
             setattr(self, col, value)
+            session.add(self)
             session.commit()
             return 1
         else:
@@ -294,7 +295,7 @@ class t_sysinfo(BaseModel):
     need_value = Column(VARCHAR(50))
     check_name = Column(VARCHAR(40))
     check_cmd = Column(VARCHAR(255))
-    sys_type = Column(Enum('Windows', 'Linux'))
+    sys_type = Column(Enum('Windows', 'Linux', 'All'))
     result_reg = Column(VARCHAR(50))
     record_table = Column(VARCHAR(50))
     record_field = Column(VARCHAR(50))

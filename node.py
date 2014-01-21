@@ -210,6 +210,10 @@ class NodeNet(object):
             for i in self.childs.values():
                 i.print_structure()
 
+    @classmethod
+    def return_session(cls):
+        return cls.__dbsession__
+
 
 class Feature(NodeNet):
     """"""
@@ -1435,7 +1439,6 @@ class SysInfo(object):
     # db session
     __dbsession__ = None
 
-    __checklist__ = {}
 
     #----------------------------------------------------------------------
     @classmethod
@@ -1462,59 +1465,81 @@ class SysInfo(object):
                 return False
 
     @classmethod
-    def _get_dbinfo(cls, sys_type=None, dbid=None):
+    def _get_dbinfo(cls, record_name=None, dbid=None):
         if not cls._get_dbclass():
             return None
         result = None
 
-        if sys_type is not None:
-            if dbid is not None:
-                result = cls.__dbsession__.query(cls.__dbclass__).filter(
-                    cls.__dbclass__.sys_type == sys_type and cls.__dbclass__.id == dbid).first()
-            else:
-                result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.sys_type == sys_type).all()
+        if record_name:
+            result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.record_field == record_name).first()
+        else:
+            result = cls.__dbsession__.query(cls.__dbclass__).all()
         cls.__dbsession__.close()
         return result
 
     def __init__(self, srv):
-        if srv is None: raise "Server Is Null"
+        if srv is None:
+            raise "Server Is Null"
         if type(srv) != Server:
             raise "param type is not Server"
-        self.server = srv
-        if len(self.__class__.__checklist__) == 0:
-            tlist = self._get_dbinfo(self.server.s.os_type)
-            for i in tlist:
-                self.__class__.__checklist__[i.id] = i
-        self.check_result = {}
 
-    def check_item(self, dbid=None, do_update=False):
+        self.server = srv
+        self.os_type = None
+        self.check_result = {}
+        self.__checklist__ = {}
+
+
+        os_type_cmd = self._get_dbinfo(record_name='os_type').check_cmd
+        os_type_result = self.server.execute(os_type_cmd, hide_puts=True)
+        if os_type_result.succeed:
+            self.os_type = os_type_result.result
+        else:
+            self.os_type = self.server.s.os_type
+
+        for i in self._get_dbinfo():
+            if i.sys_type == self.os_type or i.sys_type == 'All':
+                self.__checklist__[i.id] = i
+
+
+    def check_item(self, check_id=None, do_update=False):
         check_info = None
         check_return = None
-        if self.__class__.__checklist__.has_key(dbid):
-            check_info = self.__class__.__checklist__[dbid]
+        if self.__checklist__.has_key(check_id):
+            check_info = self.__checklist__[check_id]
         else:
             return None
-        if self.check_result.has_key(dbid):
-            check_return = self.check_result[dbid]
-            return None
+        if self.check_result.has_key(check_id):
+            check_return = self.check_result[check_id]
+            return check_return
+
         if not check_info.record_table and check_info.record_field and check_info.check_cmd:
             return None
         if check_info.need_id:
             need_result = self.check_item(check_info.need_id, do_update=False)
             if need_result not in string.split("%s" % check_info.need_value, ';'):
                 return None
-        execute_result = self.server.execute(check_info.check_cmd, hide_puts=True)
+        execute_result = self.server.execute(check_info.check_cmd, hide_puts=True, hide_server_info=True)
         if execute_result.succeed and execute_result.return_code == 0:
             # reg result
             check_return = string.strip(execute_result.result)
-            self.check_result[dbid] = check_return
+            self.check_result[check_id] = check_return
             if do_update and check_info.record_field and check_info.record_table:
-                self.server.s.update_value(check_info.record_field, check_return)
+                if self.server.s.__table__.name == check_info.record_table:
+                    self.server.s.update_value(check_info.record_field, check_return)
+
         return check_return
 
     def check_all(self, do_update=False):
-        for key, value in self.__class__.__checklist__.iteritems():
-            print ("Check [%s]=%s" % (value.check_name, self.check_item(value.id, do_update))).encode('gbk')
+        for key, value in self.__checklist__.iteritems():
+            print ("Check [%s]=%s" % (value.check_name, self.check_item(value.id, do_update)))
+        self.__dbsession__.commit()
+
+    def check_less(self, do_update=False):
+        for key, value in self.__checklist__.iteritems():
+            if value.record_field:
+                print ("Check [%s]=%s" % (value.check_name, self.check_item(value.id, do_update)))
+        self.__dbsession__.commit()
+
 
 
 class Transfer(object):
@@ -2232,5 +2257,3 @@ class Crontab(object):
 #"sed -i '/^\#master: /s/^.*$/master: syndic.vn.salt.cyoper/g' /etc/salt/minion && echo '10.6.6.42  syndic.vn.salt.cyoper'>> /etc/hosts"  
 # "/etc/init.d/salt-minion restart"
 
-#后来发现scp这东西应该属于openssh-clients这个包，运行：
-#yum install openssh-clients
