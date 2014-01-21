@@ -912,7 +912,7 @@ class Iptables(object):
         dbsession.close()
 
 
-class Nagios(object):
+class Nagios(Operation):
     config = None
     centreon = None
     operation_step = [
@@ -922,7 +922,7 @@ class Nagios(object):
         ['instal nrpe and nagios plug-in', 'install_tools'],
         ['deploy all monitor scripts', 'deploy_script'],
         ['open ping and 5666 for nagios monitor servers', 'config_iptables'],
-        ['update your nrpe commands', 'update_nrpe'],
+        ['update your nrpe commands', 'update_nrpe_cfg'],
         ['update ntp server address in your nrpe.cfg', 'update_nrpe_ntp'],
         ['change statliate nagios ip', 'change_satellite_ip'],
         ['config xinetd service', 'config_xinetd'],
@@ -931,46 +931,59 @@ class Nagios(object):
         ['test monitor script', 'test_script'],
         ['show nrpe.cfg', 'show_nrpe'],
     ]
-    install_config = {'is_installed_Linux_pm': ['tools', 'Linux_pm', 'client/tools/', '/tmp/',
-                                                """cd /tmp && \
-               tar zxf Sys-Statistics-Linux-0.66.tar.gz && \
-               cd Sys-Statistics-Linux-0.66 && \
-               perl Makefile.PL &> /dev/null; \
-               make &> /dev/null && \
-               make install &> /dev/null""",
+    
+               #"""cd /tmp && \
+               #tar zxf Sys-Statistics-Linux-0.66.tar.gz && \
+               #cd Sys-Statistics-Linux-0.66 && \
+    install_config = {
+        'is_installed_Linux_pm': ['tools', 'Linux_pm', 'client/tools/', '/tmp/',
+               """
+               perl Makefile.PL 1> /dev/null; \
+               make 1> /dev/null && \
+               make install 1> /dev/null""",
                                                 #make test &> /dev/null && \
                                                 #    'is_install_perl-devel'
                                                 None],
-                      'is_installed_nagios_plugin': ['tools', 'nagios_plugin', 'client/tools/', '/tmp/',
-                                                     """cd /tmp && \
-               tar zxf nagios-plugins-1.4.15.tar.gz && \
-               cd nagios-plugins-1.4.15 && \
-               ./configure --with-nagios-user=nagios \
+        
+                #"""cd /tmp && \
+               #tar zxf nagios-plugins-1.4.15.tar.gz && \
+               #cd nagios-plugins-1.4.15 && \                            
+        'is_installed_nagios_plugin': ['tools', 'nagios_plugin', 'client/tools/', '/tmp/',
+               """./configure --with-nagios-user=nagios \
                --with-nagios-group=nagios \
                --with-openssl=/usr/bin/openssl \
                --enable-perl-modules \
                --enable-redhat-pthread-workaround \
-               &>/dev/null && \
-               make &>/dev/null && \
-               make install &>/dev/null""", None],
-                      'is_openssl_devel': [None, None, None, None, None, None],
-                      'is_install_xinetd': ['tools', 'xinetd', 'client/tools/', '/tmp/',
-                                            """rpm -ivh /tmp/xinetd-2.3.14-38.el6.x86_64.rpm""", None],
-                      'is_installed_nrpe': ['tools', 'nrpe', 'client/tools/', '/tmp/',
-                                            """cd /tmp &&
-               tar zxf nrpe-2.12.tar.gz &&
-               cd nrpe-2.12 &&
-               ./configure  &&
-               make all  &&
-               make install-plugin  &&
-               make install-daemon   &&
-               make install-daemon-config  &&
-               make install-xinetd  """, None],
-                      'is_installed_xinetd_nrpe': ['tools', 'xinetd_nrpe', 'client/tools/', '/etc/xinetd.d/', None,
+               1>/dev/null && \
+               make 1>/dev/null && \
+               make install 1>/dev/null""", None],
+        
+        'is_openssl_devel': [None, None, None, None, None, None],
+        
+        
+        #"""cd /tmp && \
+        #rpm -ivh --nodeps xinetd-2.3.14-38.el6.x86_64.rpm """,         
+        'is_install_xinetd': ['tools', 'xinetd', 'client/tools/', '/tmp/',
+               """""", 
+               None],
+                      
+        #"""cd /tmp &&
+        #tar zxf nrpe-2.12.tar.gz &&
+        #cd nrpe-2.12 &&                      
+        'is_installed_nrpe': ['tools', 'nrpe', 'client/tools/', '/tmp/',
+               """./configure 1>/dev/null &&
+               make all 1>/dev/null &&
+               make install-plugin 1>/dev/null &&
+               make install-daemon  1>/dev/null &&
+               make install-daemon-config 1>/dev/null &&
+               make install-xinetd 1>/dev/null """, None],
+        'is_installed_xinetd_nrpe': ['tools', 'xinetd_nrpe', 'client/tools/', '/etc/xinetd.d/', None,
                                                    None],
-                      'is_installed_utils_pm': ['tools', 'utils_pm', 'client/tools/', '/usr/local/nagios/libexec', None,
+        
+        'is_installed_utils_pm': ['tools', 'utils_pm', 'client/tools/', '/usr/local/nagios/libexec', None,
                                                 None]
     }
+
 
     @classmethod
     def get_config(cls):
@@ -996,21 +1009,17 @@ class Nagios(object):
             return False
 
 
-    def __init__(self, srv):
-        if srv is None: raise "Server Is Null"
-        if type(srv) != Server:
-            raise "param type is not Server"
-        self.server = srv
+    def __init__(self, server):
+        super(Nagios, self).__init__(server)
         self.ip_monitor = self.server.s.ip_monitor
         self.get_config()
         self.get_centreon_info()
         self.status = {}
         self.base_dir = self.config.get('basic', 'base_dir')
 
-    def title(self):
-        print str(self.server)
 
     def check(self, output=True):
+        print "[==>>check monitor status]"
         scripts = self.config.options('script')
         script_shell = ""
         for script in scripts:
@@ -1073,21 +1082,19 @@ class Nagios(object):
         if raw_status.succeed:
             self.status = dict([x.split()[0].split(':') for x in raw_status.result.split('\n') if x])
             if output:
-                self.title()
                 names = self.status.keys()
                 names.sort()
                 for name in names:
                     print '%-40s    %s' % (name, self.status[name])
 
     def upgrade_perl(self, force=False):
+        print "[==>>update perl]"
         if len(self.status) == 0:
             self.check(output=False)
             #   base_dir = self.config.get('basic', 'base_dir')
         file_name = self.config.get('tools', 'perl')
         perl_file = os.path.join(self.base_dir, "client/tools/", file_name)
-        UUID = None
         if True if force else (self.status['version_perl'] == 'v5.8.5' or self.status['version_perl'] == 'v5.8.8'):
-        #  UUID = self.server.download(file, uuid=UUID)
             trans = Transfer(self.server.root, perl_file)
             trans.add_dest_server(self.server)
             trans.send('/tmp')
@@ -1108,50 +1115,61 @@ class Nagios(object):
                 print 'Error:' + exe_result.result
 
     def config_iptables(self, force=False):
+        print "[==>>config iptables]"
         if len(self.status) == 0:
             self.check(output=False)
-        self.title()
-        if (True if force else self.status['is_ping_opened'] == 'False'):
-            self.server.execute("""
-                    /sbin/iptables -I INPUT -s %s -p icmp -j ACCEPT && service iptables save
-                    """ % self.ip_monitor, hide_puts=True)
-        if self.status['is_5666_opened'] == 'False':
-            self.server.execute("""
-                    /sbin/iptables -I INPUT -s %s -p tcp --dport 5666 -j ACCEPT && service iptables save
-                    """ % self.ip_monitor, hide_puts=True)
+        if self.ip_monitor:
+            if (True if force else self.status['is_ping_opened'] == 'False'):
+                self.server.execute("""
+                        /sbin/iptables -I INPUT -s %s -p icmp -j ACCEPT && service iptables save
+                        """ % self.ip_monitor, hide_puts=True)
+            if (True if force else self.status['is_5666_opened'] == 'False'):
+                self.server.execute("""
+                        /sbin/iptables -I INPUT -s %s -p tcp --dport 5666 -j ACCEPT && service iptables save
+                        """ % self.ip_monitor, hide_puts=True)
+        else:
+            print "Error: Please entry the monitor ip in overseas db web, and retry"
 
 
     def deploy_script(self, force=False):
+        print "[==>>deploy monitor script]"
         if len(self.status) == 0:
             self.check(output=False)
             #   base_dir = self.config.get('basic', 'base_dir')
         scripts = self.config.items('script')
+        deploy_list=[]
+        package_scripts_cms=""
+        deploy_cmd=""
         for key, value in scripts:
             if (True if force else self.status['is_installed_%s' % key] == 'False'):
-                script_file = os.path.join(self.base_dir, "client/libexec/", value)
-                monitor_file = os.path.join('/usr/local/nagios/libexec', value)
-                trans = Transfer(self.server.root, script_file)
+                deploy_list.append(value)
+                
+        if len(deploy_list)>0:
+            exe_result=self.server.root.execute("""cd %s && tar zcvf /tmp/monitor-scripts.tar.gz %s 1>/dev/null""" % (os.path.join(self.base_dir,"client/libexec/"),
+                                                                                                           " ".join(deploy_list)
+                                                                                                           ),
+                                     hide_puts=True)
+            if exe_result.succeed:
+                trans = Transfer(self.server.root, """/tmp/monitor-scripts.tar.gz""")
                 trans.add_dest_server(self.server)
-                trans.send('/usr/local/nagios/libexec/')
+                trans.send('/tmp/')
                 trans.clear()
-                exe_result = self.server.execute("""chmod +x %s && \
-                                        grep -q nagios /etc/sudoers && \
-                                        (grep %s /etc/sudoers &> /dev/null \
-                                        || sed -i '/nagios/s/$/,%s/g' /etc/sudoers) \
-                                        || echo \"nagios ALL=NOPASSWD: %s\" \
-                                        >> /etc/sudoers""" % (monitor_file,
-                                                              value,
-                                                              monitor_file,
-                                                              monitor_file), hide_puts=True)
-        self.title()
-        self.server.execute("""
-                sed -i \
-                's/^Defaults    requiretty/#Defaults    requiretty/g'\
-                /etc/sudoers
-                """, hide_puts=True)
+                deploy_cmd="""tar zxvf /tmp/monitor-scripts.tar.gz -C /usr/local/nagios/libexec 1>/dev/null && \
+                              chmod -R +x /usr/local/nagios/libexec && \
+                              grep -q nagios /etc/sudoers && \
+                              sed -i 's/^Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers && \
+                              %s""" % """ && """.join([ """(grep %s /etc/sudoers &>/dev/null || sed -i '/nagios/s/$/,%s/g' /etc/sudoers) || echo \"nagios ALL=NOPASSWD: %s\" >> /etc/sudoers  """ % (i,os.path.join('/usr/local/nagios/libexec', i),os.path.join('/usr/local/nagios/libexec', i)) for i in deploy_list])
+                exe_result=self.server.execute(deploy_cmd , hide_puts=True)
+                
+                if exe_result.succeed:
+                    print 'OK'
+                else:
+                    print 'Error:' + exe_result.result                              
+                              
+
 
     def create_user(self):
-        print 'create user: nagios',
+        print "[==>>create negios user]"
         exe_result = self.server.execute("""grep nagios /etc/passwd &> /dev/null \
                 || (chattr -i /etc/shadow /etc/passwd && \
                 groupadd nagios &&  \
@@ -1166,6 +1184,7 @@ class Nagios(object):
             return False
 
     def change_satellite_ip(self):
+        print "[==>>change satellite ip]"
         satellite_ip = self.server.s.ip_monitor
         if not satellite_ip:
             tmp_ip = raw_input('You can complete the info on the DBA info web,or you can type nagios satliate ip:')
@@ -1182,7 +1201,7 @@ class Nagios(object):
 
 
     def restart_service(self):
-        print 'restart nagios service',
+        print "[==>>restart nrpe service]"
         exe_result = self.server.execute("""killall nrpe ;/etc/init.d/xinetd restart""")
         if exe_result.succeed:
             print "%-30s" % 'OK'
@@ -1190,6 +1209,23 @@ class Nagios(object):
             print "%-30s" % 'Error:' + exe_result.result
 
     def install_tools(self, check_name, force=False):
+        def _install_prepare_prefix(spath,sfile):
+            slist=[]
+            slist.append("cd %s" % spath)
+            for ext in [".tar.gz",".rpm"]:
+                if ext==".tar.gz" and sfile.endswith(ext):
+                    slist.append("tar zxf %s" % sfile)
+                    slist.append("cd %s" % string.split(sfile,ext)[0])
+                    break
+                elif ext==".rpm" and sfile.endswith(ext):
+                    slist.append("rpm -ivh --nodeps %s" % sfile)
+                    break
+            if len(slist)== 1:
+                return None
+            else:
+                return " && ".join(slist)        
+        
+        
         if len(self.status) == 0:
             self.check(output=False)
         if True if force and self.status.has_key(check_name) else (
@@ -1207,7 +1243,7 @@ class Nagios(object):
             exe_cmd = value[4]
             if config_section is None and config_key is None:
                 return False
-            print 'Start to install: %s' % check_name,
+            print "[==>>Install pulgin: %s]" % check_name
             file_name = self.config.get(config_section, config_key)
             trans_file = os.path.join(self.base_dir, middle_path, file_name)
             trans = Transfer(self.server.root, trans_file)
@@ -1215,20 +1251,22 @@ class Nagios(object):
             trans.send(trans_path)
             trans.clear()
             if exe_cmd:
-                exe_result = self.server.execute(exe_cmd, hide_stderr=True)
-                if exe_result.succeed:
-                    print "%-30s" % 'OK'
-                    self.status[check_name] = 'True'
-                    return True
-                else:
-                    print "%-30s" % 'Error:' + exe_result.result
-                    return False
+                cmd_prefix=_install_prepare_prefix(trans_path,file_name)
+                if cmd_prefix:
+                    exe_cmd="%s && %s " % (cmd_prefix,exe_cmd)
+                    exe_result = self.server.execute(exe_cmd, hide_stderr=True)
+                    if exe_result.succeed:
+                        print "%-30s" % 'OK'
+                        self.status[check_name] = 'True'
+                        return True
+                    else:
+                        print "%-30s" % 'Error:' + exe_result.result
+                        return False
         else:
             return False
 
 
     def test_script(self):
-        self.title()
         commands = self.config.items('test_commands')
         command_lines = ""
         for (command, command_line) in commands:
@@ -1236,13 +1274,11 @@ class Nagios(object):
         self.server.execute(command_lines)
 
     def show_nrpe(self):
-        self.title()
         nrpes = self.config.items('nrpe')
         for name, value in nrpes:
             print "%-40s=%90s" % (name, value)
 
-    def update_nrpe(self, nrpe_name=None):
-        self.title()
+    def update_nrpe_cfg(self, nrpe_name=None):
         nrpes = self.config.items('nrpe')
         shell = ""
         #  if nrpe_name and nrpe_name in nrpes
@@ -1265,10 +1301,11 @@ class Nagios(object):
                         echo "%s" >> \
                         /usr/local/nagios/etc/nrpe.cfg;
                         """ % (name, nrpe_line)
-        print 'update nrpe script in nrpe.cfg:%s' % nrpe_name if nrpe_name else "ALL"
+        print '[==>>Update nrpe command in nrpe.cfg: %s]' % (nrpe_name if nrpe_name else "ALL")
         self.server.execute(shell)
 
     def config_xinetd(self):
+        print "[==>>config xinetd service]"
         if len(self.status) == 0:
             self.check(output=False)
         if self.status['is_install_xinetd'] == 'False':
@@ -1284,7 +1321,6 @@ class Nagios(object):
 
 
     def review_nrpe(self):
-        self.title()
         self.server.execute("""
                 egrep -v '^#|^$' \
                 /usr/local/nagios/etc/nrpe.cfg \
@@ -1292,8 +1328,7 @@ class Nagios(object):
                 """)
 
     def update_nrpe_ntp(self):
-        self.title()
-        print 'update ntp server',
+        print "[==>>update ntp server in nrpe.cfg]"
         ntp = string.strip(self.server.s.ip_ntp_server)
         if len(ntp) > 0:
             exe_result = self.server.execute(""" grep check_ntp /usr/local/nagios/etc/nrpe.cfg && \
@@ -1303,16 +1338,16 @@ class Nagios(object):
             else:
                 print 'Error:' + exe_result.result
         else:
-            print 'please fill the ntpserver in DB info web'
+            print 'Please fill the ntpserver in overseas dbinfo site'
 
     def deploy(self, force=False):
-        print "check monitor status"
+        #"[==>>check monitor status]"
         self.check()
-        print "create negios user"
+        # "[==>>create negios user]"
         self.create_user()
-        print "update perl"
+        # "[==>>update perl]"
         self.upgrade_perl()
-        print "install tools"
+        # "[==>>install tools]"
         tool_list = ['is_installed_Linux_pm',
                      'is_installed_nagios_plugin',
                      'is_openssl_devel',
@@ -1323,22 +1358,22 @@ class Nagios(object):
         for tool in tool_list:
             self.install_tools(tool, force)
 
-        print "config iptables"
+        #"[==>>config iptables]"
         self.config_iptables()
 
-        print "deploy monitor script"
+        # "[==>>deploy monitor script]"
         self.deploy_script(force=force)
-        print "update nrpe"
-        self.update_nrpe()
-        print "change staliate ip"
+        #"[==>>update nrpe.cfg]"
+        self.update_nrpe_cfg()
+        # "[==>>change staliate ip]"
         self.change_satellite_ip()
-        print "update ntp server in nrpe.cfg"
+        #"[==>>update ntp server in nrpe.cfg]"
         self.update_nrpe_ntp()
-        print 'config xinetd service'
+        # '[==>>config xinetd service]'
         self.config_xinetd()
-        print 'restart nrpe service'
+        # '[==>>restart nrpe service]'
         self.restart_service()
-        print 'finished'
+        # '[==>>finished]'
         #   print "deploy nagios monitor completly,Next to restart service"
 
 
@@ -1611,6 +1646,7 @@ class Transfer(object):
         self.trans_list = {}
         dest_list = self.dest_servers if len(self.dest_servers) < 2 else sorted(self.dest_servers,
                                                                                 key=lambda x: x.level, reverse=True)
+        print "Sending: %s" % self.source_path
         #对目标服务器按level进行排序，先传输level数值大的，可以增加
         for value in dest_list:
             #记录uuid使用次数，初始是-1.正常结束时0，每传递加1，有问题为-2【记录机器为传输目标机器】
@@ -1705,23 +1741,23 @@ class Transfer(object):
                             break
 
 
-    def clear(self):
+    def clear(self,quiet=True):
         if not self.trans_list:
             return
-        print "Start to clear temp files"
+        if not quiet: print "Start to clear temp files"
         for key, value in self.trans_list.iteritems():
             if value[1] > 1:
-                print "%5s%100s%5s  %40s" % (key, value[0], value[1], value[2]),
+                if not quiet: print "%5s%100s%5s  %40s" % (key, value[0], value[1], value[2]),
                 exe_result = value[0].execute("cd %s; rm -rf %s" % ( self.tmppath, self.uuid), hide_stdout=True,
                                               hide_puts=True, hide_server_info=True)
                 if exe_result.succeed:
                     value[1] = 0
-                    print 'ok'
+                    if not quiet: print 'ok'
                 else:
                     value[1] = -2
-                    print 'fail'
+                    if not quiet: print 'fail'
             else:
-                print "%5s%100s%5s  %s" % (key, value[0], value[1], value[2])
+                if not quiet: print "%5s%100s%5s  %s" % (key, value[0], value[1], value[2])
 
 
 class SysInit(object):
