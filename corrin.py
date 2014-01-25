@@ -126,8 +126,8 @@ class Shell(cmd.Cmd):
         Server.encoding = self.encoding
         self.server = Server(self.centerid if self.centerid else None)
         self.server.breed()
-        self.feature = Feature(foreignclass=Server)
-        self.feature.breed(True)
+        #self.feature = Feature(foreignclass=Server)
+        #self.feature.breed(True)
         self.piecis = {}
         self.mode = Server
         self.__set_prompt(self.mode.current_node)
@@ -281,7 +281,68 @@ class Shell(cmd.Cmd):
                                          colors.magenta(str(node), prompt=True),
                                          ']')
 
+    #def __process_list(self,use_format, use_thread, inst_list, fun,*args, **kwargs):
+        #results = []
+        #cross_print = False
+        #error_count = len(inst_list)
+        #elapsed_sum = 0
+        #proc_fun = fun
+        #work_manager = None
+        
+
+        #try:
+            #if use_thread:
+                #work_manager = WorkManager(thread_num=5)
+            #for instance in inst_list:
+                #if instance is None:
+                    #continue
+                #if not  use_format:
+                    #print colors.magenta( str(getattr(instance,"server") if hasattr(instance,"server") else instance), prompt=False)                
+                #if hasattr(instance, fun):
+                    #if use_thread:
+                        #work_manager.add_job(getattr(instance, proc_fun), *args, **kwargs)
+                    #else:
+                        #res = getattr(instance, proc_fun)(*args, **kwargs)
+                        #results.append(res)
+            #if use_thread:
+                #work_manager.start_queue()
+                #work_manager.wait_allcomplete()
+                #for i in range(work_manager.result_queue.qsize()):
+                    ## results.append(work_manager.result_queue.get())
+                    #one_result = work_manager.result_queue.get()
+                    #results.append(one_result)
+                    #work_manager.result_queue.task_done()
+
+            #for result in results:
+                #if result and (not cross_print) and string.find(result.result, '\n') != -1:
+                    #cross_print = True
+                    ##if result is None or result.succeed == False:
+                    ##error_count -=1
+                #if result is not None and result.succeed:
+                    #elapsed_sum += result.elapsed
+                    #error_count -= 1
+
+            #if use_format: self.__print_result(results, len(inst_list), error_count, elapsed_sum, cross_print)
+            #os.system('stty sane')
+        #except Exception, e:
+            #print "Error:%s" % e
+            #traceback.print_exc()
+        #finally:
+            #Server.disconnect_all()
+
     def __process_list(self,use_format, use_thread, inst_list, fun,*args, **kwargs):
+        def worker(task_queue,result_queue,fun,*args,**kwargs):
+            proc_name = multiprocessing.current_process().name
+            pid=multiprocessing.current_process().pid,
+            print (pid,proc_name)
+            obj=task_queue.get()
+            res=getattr(obj,fun)(*args,**kwargs)
+            print " %s:%s" % (proc_name,str(res))
+            result_queue.put(res)
+            
+        from multiprocessing.dummy import Pool as ThreadPool
+        import multiprocessing
+        import time
         results = []
         cross_print = False
         error_count = len(inst_list)
@@ -292,7 +353,28 @@ class Shell(cmd.Cmd):
 
         try:
             if use_thread:
-                work_manager = WorkManager(thread_num=5)
+                #work_manager = WorkManager(thread_num=5)
+                record = []
+                tasks = multiprocessing.Queue()
+                task_results=multiprocessing.Queue()
+
+                for i in inst_list:
+                    p=multiprocessing.Process(target=worker,args=(tasks,task_results,fun)+args,kwargs=kwargs)
+                    p.start() 
+                    tasks.put(i)
+                    record.append(p)
+                    
+                    
+                for i in record:
+                    i.join(15)
+                tasks.close()
+                tasks.join_thread()
+                for i in record:
+                    if i.exitcode() == None:
+                        i.terminate()
+
+                print "aa"
+                return
             for instance in inst_list:
                 if instance is None:
                     continue
@@ -329,6 +411,7 @@ class Shell(cmd.Cmd):
             traceback.print_exc()
         finally:
             Server.disconnect_all()
+
 
     def __print_result(self, results, inst_count, error_count, elapsed_sum, cross_print=False):
         def __print_table(results, encoding="gbk"):
@@ -388,26 +471,18 @@ class Shell(cmd.Cmd):
             if inCurrent:
                 server_list.append(node)
         object_list = []
-        if objClass:
-            object_list = [objClass(i) for i in server_list]
+        for i in server_list:
+            if objClass:
+                oper_obj=objClass(i)
+                if hasattr(oper_obj,"available"):
+                    if getattr(oper_obj,"available")() == True:
+                        object_list.append(oper_obj)
+                else:
+                    object_list.append(oper_obj)
         return object_list if objClass else server_list
 
 
 
-        #if opts is not None and hasattr(opts,'piece') and self.piecis.has_key(opts.piece):
-        #for value in self.piecis[opts.piece]['servers']:
-        #serverlist.append(value)
-        #else:
-        #serverlist.append(self.server.current_node)
-        #return serverlist
-
-        #def _get_childs_list(self,recursion=False):
-        #serverlist=[]
-        #if self.server.current_node.childs is None:
-        #self.server.current_node.breed()
-        #for i in self.server.current_node.childs.values():
-        #serverlist.append(i)
-        #return serverlist
 
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
@@ -523,7 +598,7 @@ class Shell(cmd.Cmd):
             oper = "print_filter"
             oper_param = None
         elif opts.script:
-            oper = "make_script"
+            oper = "script"
             oper_param = None
 
         elif opts.reload:
@@ -750,26 +825,38 @@ class Shell(cmd.Cmd):
                                                 inChilds=True if opts.childs else False,
                                                 useRecursion=True if opts.recursion else False,
                                                 objClass=Crontab)
-        for item in crontab_list:
-            if item.judge_available():
-                if opts.show:
-                    item.show()
-                if opts.collect:
-                    item.collect()
-                if opts.list:
-                    item.list()
-                if opts.delete:
-                    item.delete(opts.cronid)
-                if opts.disable:
-                    item.disable(opts.cronid)
-                if opts.enable:
-                    item.enable(opts.cronid)
-                if opts.change_group:
-                    item.list()
-                    group_name = self.select(Crontab.groups, prompt='Your choice group?')
-                    cronid_list = raw_input('Please give crondbid list spliting with comma:')
-                    if cronid_list:
-                        item.change_group(group_name, *string.split(cronid_list, ','))
+        oper = None
+        oper_param = []   
+
+
+        if opts.show:
+            oper="show"
+        if opts.collect:
+            oper="collect"
+        if opts.list:
+            oper="list"
+        if opts.delete:
+            oper="list"
+            oper_param=[opts.cronid]
+
+        if opts.disable:
+            oper="disable"
+            oper_param=[opts.cronid]
+        if opts.enable:
+            oper="enable"
+            oper_param=[opts.cronid]
+        if opts.change_group:
+            item.list()
+            group_name = self.select(Crontab.groups, prompt='Your choice group?')
+            cronid_list = raw_input('Please give crondbid list spliting with comma:')
+            oper="change_group"
+            oper_param=string.split(cronid_list, ',')
+        self.__process_list(False,
+                            True if hasattr(opts,"threads") and opts.threads else False,
+                            crontab_list,
+                            oper,
+                            *oper_param)         
+
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
               make_option('--recursion', action='store_true', help='get childs  with recursion'),
