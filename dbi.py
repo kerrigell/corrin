@@ -11,6 +11,7 @@ from sqlalchemy.dialects.mysql import TINYINT
 from sqlalchemy.types import SchemaType, TypeDecorator, Enum
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql.expression import text
+from sqlalchemy.orm import relationship,backref
 import ConfigParser
 import time, datetime
 import sys, os.path
@@ -31,120 +32,103 @@ def _get_db_string():
 
 
 engine = create_engine(_get_db_string(), pool_size=4, pool_recycle=10, max_overflow=10)
+
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
-
 session = Session()
+
+
+#这样写会不会每次调用模块都会被调用，相同的功能添加到init_db()中了
+#Base.metadata.create_all(engine)
+
+def init_db():
+    BaseModel.metadata.create_all(engine)
+def drop_db():
+    BaseModel.metadata.drop_all(engine)
 
 class BaseModel(Base):
     __abstract__ = True
     __table_args__ = {
         'mysql_engine':'InnoDB',
         'mysql_charset':'utf8'
-        }    
-    @classmethod
-    def get_by_id(cls, session, id, columns=None, lock_mode=None):
-        if hasattr(cls, 'id'):
-            scalar = False
-            if columns:
-                if isinstance(columns, (tuple, list)):
-                    query = session.query(*columns)
-                else:
-                    scalar = True
-                    query = session.query(columns)
-            else:
-                query = session.query(cls)
-            if lock_mode:
-                query = query.with_lockmode(lock_mode)
-            query = query.filter(cls.id == id)
-            if scalar:
-                return query.scalar()
-            return query.first()
-        return None
-    @classmethod
-    def get_by_serverid(cls, session, server_id, columns=None, lock_mode=None):
-        if hasattr(cls, 'server_id'):
-            scalar = False
-            if columns:
-                if isinstance(columns, (tuple, list)):
-                    query = session.query(*columns)
-                else:
-                    scalar = True
-                    query = session.query(columns)
-            else:
-                query = session.query(cls)
-            if lock_mode:
-                query = query.with_lockmode(lock_mode)
-            query = query.filter(cls.server_id == server_id)
-            if scalar:
-                return query.scalar()
-            return query.first()
-        return None
+        }
+    session=Session()
 
     @classmethod
-    def get_all(cls, session, columns=None, offset=None, limit=None, order_by=None, lock_mode=None):
-        if columns:
-            if isinstance(columns, (tuple, list)):
-                query = session.query(*columns)
+    def get(cls,  value ,filter='id', columns=None, lock_mode=None,first=False):
+        if hasattr(cls,filter):
+            scalar = False
+            if columns:
+                if isinstance(columns, (tuple, list)):
+                    query = cls.session.query(*columns)
+                else:
+                    scalar = True
+                    query = cls.session.query(columns)
             else:
-                query = session.query(columns)
-                if isinstance(columns, str):
-                    query = query.select_from(cls)
+                query = cls.session.query(cls)
+            if lock_mode:
+                query = query.with_lockmode(lock_mode)
+            if isinstance(value,(list,tuple)):
+                query=query.filter(getattr(cls,filter).in_(value))
+            else:
+                query=query.filter(getattr(cls,filter) == value)
+            if scalar:
+                return query.scalar()
+            if first:
+                return query.first()
+            else:
+                return query.all()
         else:
-            query = session.query(cls)
-        if order_by is not None:
-            if isinstance(order_by, (tuple, list)):
-                query = query.order_by(*order_by)
-            else:
-                query = query.order_by(order_by)
-        if offset:
-            query = query.offset(offset)
-        if limit:
-            query = query.limit(limit)
-        if lock_mode:
-            query = query.with_lockmode(lock_mode)
-        return query.all()
+            return None
+
+
+
+    #@classmethod
+    #def count_all(cls, lock_mode=None):
+        #query = cls.session.query(func.count('*')).select_from(cls)
+        #if lock_mode:
+            #query = query.with_lockmode(lock_mode)
+        #return query.scalar()
+
+
+    #@classmethod
+    #def exist(cls,  id, lock_mode=None):
+        #if hasattr(cls, 'id'):
+            #query = cls.session.query(func.count('*')).select_from(cls).filter(cls.id == id)
+            #if lock_mode:
+                #query = query.with_lockmode(lock_mode)
+            #return query.scalar() > 0
+        #return False
+
+
 
 
     @classmethod
-    def count_all(cls, session, lock_mode=None):
-        query = session.query(func.count('*')).select_from(cls)
-        if lock_mode:
-            query = query.with_lockmode(lock_mode)
-        return query.scalar()
-
-
-    @classmethod
-    def exist(cls, session, id, lock_mode=None):
+    def set_attrs(cls,  id, **attrs):
         if hasattr(cls, 'id'):
-            query = session.query(func.count('*')).select_from(cls).filter(cls.id == id)
-            if lock_mode:
-                query = query.with_lockmode(lock_mode)
-            return query.scalar() > 0
-        return False
-
+            cls.session.query(cls).filter(cls.id == id).update(**attrs)
+            cls.session.commit()
+    @classmethod
+    def add(cls, **attrs):
+        try:
+            cls.session.add(cls(**attrs))
+            cls.session.commit()
+        except Exception,e:
+            print e
 
     @classmethod
-    def set_attr(cls, session, id, attr, value):
-        if hasattr(cls, 'id'):
-            session.query(cls).filter(cls.id == id).update({
-                attr: value
-            })
-            session.commit()
-
-
-    @classmethod
-    def set_attrs(cls, session, id, attrs):
-        if hasattr(cls, 'id'):
-            session.query(cls).filter(cls.id == id).update(attrs)
-            session.commit()
+    def delete(cls,value,filter='id'):
+        try:
+            for ins in cls.get(value,filter):
+                cls.session.delete(ins)
+            cls.session.commit()
+        except Exception,e:
+            print e
 
 
 
-def init_db():
-    BaseModel.metadata.create_all(engine)
-def drop_db():
-    BaseModel.metadata.drop_all(engine)
+
+
 
 class t_region(BaseModel):
     __tablename__ = 't_region'
@@ -324,7 +308,7 @@ class t_iptables(BaseModel):
     id = Column(Integer, primary_key=True)
     server_id = Column(Integer)
     trx_id = Column(VARCHAR(16))
-    trx_time = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP')) 
+    trx_time = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
 
 
 class t_iptables_rules(BaseModel):
@@ -337,5 +321,4 @@ class t_iptables_rules(BaseModel):
     opt = Column(VARCHAR(150))
     arg = Column(VARCHAR(150))
 
-#这样写会不会每次调用模块都会被调用，相同的功能添加到init_db()中了
-#Base.metadata.create_all(engine)
+
