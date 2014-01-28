@@ -803,7 +803,7 @@ class Iptables_rules(object):
         return rules
 
     def _load_rules(self, trx_id=None):
-        pass
+        return True
 
     def __init__(self, srv, raw_rules=None, trx_id=None):
         if srv is None:
@@ -820,7 +820,7 @@ class Iptables_rules(object):
         if self.__class__.__dbsession__ is None or self.__class__.__dbclass__ is None:
             self._get_dbclass()
 
-    def save_rules_to_db(self):
+    def save_rules_to_corrin(self):
         dbsession = self.__class__.__dbsession__
         dbclass = self.__class__.__dbclass__
         try:
@@ -895,7 +895,7 @@ class Iptables(object):
             self._get_dbclass()
             self.rules = self._get_dbinfo(dbid=srv.dbid)
 
-    def save_from_server(self):
+    def save_online_to_corrin(self):
         all_rules = self.server.execute('iptables-save', hide_puts=True, hide_server_info=True)
         dbsession = self.__class__.__dbsession__
         dbclass = self.__class__.__dbclass__
@@ -903,7 +903,7 @@ class Iptables(object):
             trx_id = str(muuid.uuid4()).rsplit('-', 3)[0]
             trx_time = time.strftime("%Y%m%d%H%M%S")
             rules = Iptables_rules(self.server, raw_rules=all_rules.result.splitlines(True), trx_id=trx_id)
-            rules.save_rules_to_db()
+            rules.save_rules_to_corrin()
             dbsession.add(dbclass(
                 server_id=self.server.dbid,
                 trx_id=trx_id,

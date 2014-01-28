@@ -552,7 +552,8 @@ class Shell(cmd.Cmd):
         make_option('-c', '--childs', action='store_true', help='Get childs '),
         make_option('-s', '--save', action='store_true', help='Store iptables rules from onlie server to database'),
         make_option('-l', '--list', action='store_true', help='List online iptables'),
-        make_option('--nvL', action='store_true', help='List online iptables with "iptables -nvL" style')
+        make_option('--nvL', action='store_true', help='List online iptables with "iptables -nvL" style'),
+        make_option('--insert', action='store', type='string', help='Immediately insert a new rule at the top')
     ])
     def do_iptables(self, args, opts=None):
         iptables_list = self._get_operation_list(
@@ -563,18 +564,21 @@ class Shell(cmd.Cmd):
             useRecursion=True if opts.recursion else False,
             objClass=Iptables
         )
-        if opts.save:
-            for iptables in iptables_list:
-                iptables.save_from_server()
-            return
-        if opts.list:
-            for iptables in iptables_list:
-                iptables.server.execute('iptables-save')
-            return
-        if opts.nvL:
-            for iptables in iptables_list:
-                iptables.server.execute('iptables -vnL --line')
-            return
+        iptables_list = [x for x in iptables_list if x.server.s.os_type == 'Linux']
+        for iptables in iptables_list:
+            if opts.list:
+                iptables.server.execute('iptables-save 2>/dev/null')
+                return
+            if opts.nvL:
+                iptables.server.execute('iptables -vnL --line 2>/dev/null')
+                return
+            if opts.save:
+                iptables.save_online_to_corrin()
+                return
+            if opts.insert:
+                iptables.insert_rule(opts.insert)
+                return
+
 
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
