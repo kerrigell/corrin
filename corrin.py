@@ -627,7 +627,8 @@ class Shell(cmd.Cmd):
         make_option('-c', '--childs', action='store_true', help='Get childs '),
         make_option('-s', '--save', action='store_true', help='Store iptables rules from onlie server to database'),
         make_option('-l', '--list', action='store_true', help='List online iptables'),
-        make_option('--nvL', action='store_true', help='List online iptables with "iptables -nvL" style')
+        make_option('--nvL', action='store_true', help='List online iptables with "iptables -nvL" style'),
+        make_option('--insert', action='store', type='string', help='Immediately insert a new rule at the top')
     ])
     def do_iptables(self, args, opts=None):
         iptables_list = self._get_operation_list(
@@ -652,6 +653,7 @@ class Shell(cmd.Cmd):
             return
 
 
+
     @options([make_option('-p', '--piece', type='string', help='piece name'),
               make_option('--recursion', action='store_true', help='get childs  with recursion'),
               make_option('-c', '--childs', action='store_true', help='get childs '),
@@ -668,6 +670,8 @@ class Shell(cmd.Cmd):
             print item.server
             if opts.check_all:
                 item.check_all(do_update=True if opts.update else False)
+            else:
+                item.check_less(do_update=True if opts.update else False)
 
     @options([make_option('-p', '--piece', type='string', help='piece name'),
               make_option('--recursion', action='store_true', help='get childs  with recursion'),
