@@ -127,10 +127,11 @@ class NodeNet(object):
         if cls.__nodemap__.has_key(dbid):
             return cls.__nodemap__[dbid]
         dbinfo = cls.get_dbclass().get(dbid,first=True)
-        if not dbinfo: return None
+        if not dbinfo:
+            raise  Exception("Error: no information while id=[%s] in table %s" % (dbid,cls.__dbtable__) )
         parent_node = cls.get_node(dbinfo.pid)
-        if dbinfo.pid != 0 and parent_node is None:
-            return None
+        # if dbinfo.pid != 0 and parent_node is None:
+        #     return None
         self_node = cls(dbid, cls.__foreignclass__)
         if dbinfo.pid != 0:
             parent_node.breed()
@@ -242,6 +243,7 @@ class NodeNet(object):
                         cnode = cls.current_node.childs[cdbid]
                     else:
                         cnode=cls.get_node(cdbid)
+
         if cnode.childs is None:
             cnode.breed()
         cls.current_node = cnode

@@ -850,7 +850,6 @@ class Shell(cmd.Cmd):
             oper="enable"
             oper_param=[opts.cronid]
         if opts.change_group:
-            item.list()
             group_name = self.select(Crontab.groups, prompt='Your choice group?')
             cronid_list = raw_input('Please give crondbid list spliting with comma:')
             oper="change_group"
