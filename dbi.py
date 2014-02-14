@@ -37,7 +37,8 @@ engine = create_engine(_get_db_string(), pool_size=4, pool_recycle=10, max_overf
 
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
-session = Session()
+#session = Session()
+
 
 
 #这样写会不会每次调用模块都会被调用，相同的功能添加到init_db()中了
@@ -59,35 +60,48 @@ class BaseModel(Base):
         'mysql_engine':'InnoDB',
         'mysql_charset':'utf8'
         }
-    session=Session()
+
+    # use a session every record
+    # session=Session()
 
     @classmethod
     def get(cls,  value ,filter='id', columns=None, lock_mode=None,first=False):
-        if hasattr(cls,filter):
-            scalar = False
-            if columns:
-                if isinstance(columns, (tuple, list)):
-                    query = cls.session.query(*columns)
+        result=None
+        try:
+            session=Session()
+            if hasattr(cls,filter):
+                scalar = False
+                if columns:
+                    if isinstance(columns, (tuple, list)):
+                        query = session.query(*columns)
+                    else:
+                        scalar = True
+                        query = session.query(columns)
                 else:
-                    scalar = True
-                    query = cls.session.query(columns)
+                    query = session.query(cls)
+                if lock_mode:
+                    query = query.with_lockmode(lock_mode)
+                if isinstance(value,(list,tuple)):
+                    query=query.filter(getattr(cls,filter).in_(value))
+                else:
+                    query=query.filter(getattr(cls,filter) == value)
+                if scalar:
+                    result = query.scalar()
+                if first:
+                    result = query.first()
+                else:
+                    result = query.all()
             else:
-                query = cls.session.query(cls)
-            if lock_mode:
-                query = query.with_lockmode(lock_mode)
-            if isinstance(value,(list,tuple)):
-                query=query.filter(getattr(cls,filter).in_(value))
-            else:
-                query=query.filter(getattr(cls,filter) == value)
-            if scalar:
-                return query.scalar()
-            if first:
-                return query.first()
-            else:
-                return query.all()
-        else:
-            return None
-
+                result = None
+        except Exception,e:
+            print e
+            if session:
+                session.rollback()
+            result = None
+        finally:
+            if session:
+                session.close()
+            return result
 
 
     #@classmethod
@@ -112,26 +126,46 @@ class BaseModel(Base):
 
     @classmethod
     def set_attrs(cls,  id, **attrs):
-        if hasattr(cls, 'id'):
-            cls.session.query(cls).filter(cls.id == id).update(**attrs)
-            cls.session.commit()
+        try:
+            session=Session()
+            if hasattr(cls, 'id'):
+                session.query(cls).filter(cls.id == id).update(**attrs)
+                session.commit()
+        except Exception,e:
+            print e
+            if session:
+                session.rollback()
+        finally:
+            if session:
+                session.close()
     @classmethod
     def add(cls, **attrs):
         try:
+            session=Session()
             cls.session.add(cls(**attrs))
             cls.session.commit()
         except Exception,e:
             print e
+            if session:
+                session.rollback()
+        finally:
+            if session:
+                session.close()
 
     @classmethod
     def delete(cls,value,filter='id'):
         try:
+            session=Session()
             for ins in cls.get(value,filter):
-                cls.session.delete(ins)
-            cls.session.commit()
+                session.delete(ins)
+            session.commit()
         except Exception,e:
             print e
-
+            if session:
+                session.rollback()
+        finally:
+            if session:
+                session.close()
 
 
 
@@ -176,11 +210,11 @@ class t_server(BaseModel):
     vender = Column(Enum('Dell', 'HP', 'VMware', 'Intel', 'Xen'))
     model = Column(VARCHAR(100))
     os_type = Column(Enum('Linux', 'Windows'))
-    os_release = Column(VARCHAR(100))
-    os_arch = Column(Enum('x86_64', 'i686', 'i386'))
+    os_release = Column(Enum('RHEL_5_3', 'RHEL_4_8', 'RHEL_4_6', 'CENT_6_3', 'WIN2003', 'WIN2008'))
+    os_arch = Column(Enum('x86_64', 'i386'))
     ip_monitor = Column(VARCHAR(16))
     ip_ntp_server = Column(VARCHAR(16))
-    serial = Column(VARCHAR(100))
+    serial = Column(VARCHAR(50))
     is_online = Column(Boolean, server_default='0')
     update_time = Column(TIMESTAMP, server_default=text('0 ON UPDATE CURRENT_TIMESTAMP'))
     create_time = Column(TIMESTAMP, server_default=text('0'))
@@ -209,7 +243,12 @@ class t_server(BaseModel):
 
     @classmethod
     def _get_word(cls, col):
-        ret = session.query(col).filter(col != None).distinct().all()
+        try:
+            session=Session()
+            ret = session.query(col).filter(col != None).distinct().all()
+        finally:
+            if session:
+                session.close()
         return [(str(x[0]), col) for x in ret]
 
     @classmethod
@@ -224,21 +263,16 @@ class t_server(BaseModel):
                 knife[i] = words[i]
         if len(knife.keys()) <= 0:
             return []
-        result = session.query(t_server)
+        try:
+            session=Session()
+            result = session.query(t_server)
+        finally:
+            if session:
+                session.close()
         for value, col in knife.iteritems():
             result = result.filter(col == value)
         result = result.all()
         return [i.id for i in result]
-
-    def update_value(self, col, value):
-        if hasattr(self, col):
-            setattr(self, col, value)
-            session.add(self)
-            session.commit()
-            return 1
-        else:
-            print 'this tables has no field of \'%s\'' % col
-            return 0
 
 
 class t_feature(BaseModel):

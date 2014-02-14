@@ -639,20 +639,18 @@ class Shell(cmd.Cmd):
             useRecursion=True if opts.recursion else False,
             objClass=Iptables
         )
-        iptables_list = [x for x in iptables_list if x.server.s.os_type == 'Linux']
-        for iptables in iptables_list:
-            if opts.list:
-                iptables.server.execute('iptables-save 2>/dev/null')
-                return
-            if opts.nvL:
-                iptables.server.execute('iptables -vnL --line 2>/dev/null')
-                return
-            if opts.save:
-                iptables.save_online_to_corrin()
-                return
-            if opts.insert:
-                iptables.insert_rule(opts.insert)
-                return
+        if opts.save:
+            for iptables in iptables_list:
+                iptables.save_from_server()
+            return
+        if opts.list:
+            for iptables in iptables_list:
+                iptables.server.execute('iptables-save')
+            return
+        if opts.nvL:
+            for iptables in iptables_list:
+                iptables.server.execute('iptables -vnL --line')
+            return
 
 
 
@@ -852,7 +850,6 @@ class Shell(cmd.Cmd):
             oper="enable"
             oper_param=[opts.cronid]
         if opts.change_group:
-            item.list()
             group_name = self.select(Crontab.groups, prompt='Your choice group?')
             cronid_list = raw_input('Please give crondbid list spliting with comma:')
             oper="change_group"
