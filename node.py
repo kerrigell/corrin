@@ -52,20 +52,24 @@ class NodeNet(object):
     #----------------------------------------------------------------------
     
     @classmethod
-    def get_dbclass(cls,table_name=None):
+    def get_dbclass(cls):
         if  cls.__dbclass__ is not None:
             return cls.__dbclass__      
-        if table_name is None:
+        if cls.__dbtable__ is None:
             return None
-        dbclassname=table_name
+        dbclassname=cls.__dbtable__ 
         dbclass = None
         import importlib
-        mo = importlib.import_module('dbi')
+        module_name='dbi'
+        mo = importlib.import_module(module_name)
         if mo:
             if hasattr(mo, dbclassname):
                 dbclass = getattr(mo, dbclassname)
                 if dbclass :
+                    cls.__dbclass__ = dbclass
                     return dbclass
+                else:
+                    raise "There is no class of %s in %s module" % ( dbclassname, module_name)
             else:
                 return None
         else:
@@ -74,20 +78,18 @@ class NodeNet(object):
 
 
 
-    def __init__(self, node_id , table_name=None, foreignclass=None):
+    def __init__(self, node_id ,  foreignclass=None):
         """Constructor"""
         # search __nodemap__
         if self.__nodemap__.has_key(node_id):
             self=self.__nodemap__[node_id]
             return
         # mapped into db table class
-        if self.__dbtable__ is None and table_name is not None:
-            self.__dbtable__ = table_name
         if self.__dbclass__ is None and self.__dbtable__ is not None:
-            self.__dbclass__=self.get_dbclass(self.__dbtable__)
+            self.get_dbclass()
         
         # node relation property
-        self.s = self.__dbclass__.get(node_id,first=True) if self.__dbclass__ else None
+        self.s = self.get_dbclass().get(node_id,first=True) if self.__dbclass__ else None
         if self.s is None:
             raise Exception("Error: Can't find the information record: %s" % node_id)
         self.dbid = None if self.s is None else self.s.id
@@ -106,7 +108,7 @@ class NodeNet(object):
             self.foreignnode=None
             self.dockapply()
         # init  current node if not exists
-        self.__class__.set_current_node(self)
+        self.set_current_node(self)
 
         
     def add_child(self, child):
@@ -124,12 +126,12 @@ class NodeNet(object):
     def get_node(cls, dbid):
         if cls.__nodemap__.has_key(dbid):
             return cls.__nodemap__[dbid]
-        dbinfo = cls.__dbclass__.get(dbid,first=True)
-        if dbinfo: return None
+        dbinfo = cls.get_dbclass().get(dbid,first=True)
+        if not dbinfo: return None
         parent_node = cls.get_node(dbinfo.pid)
         if dbinfo.pid != 0 and parent_node is None:
             return None
-        self_node = cls(dbid, cls.__dbtable__, cls.__foreignclass__)
+        self_node = cls(dbid, cls.__foreignclass__)
         if dbinfo.pid != 0:
             parent_node.breed()
             parent_node.add_child(self_node)
@@ -140,14 +142,13 @@ class NodeNet(object):
         '''依据自身.dbid值，繁殖子节点：返回子嗣数量'''
         if not (self.childs is None) and len(self.childs) > 0:
             return len(self.childs)
-        
-        result=self.__dbclass__.get(self.dbid,"pid")
-        for child_info in self.__dbclass__.get(self.dbid,"pid"):
+
+        for child_info in self.get_dbclass().get(self.dbid,"pid"):
             if self.childs is None:
                 self.childs={}
             if self.__nodemap__.has_key(child_info.id):
                 continue
-            child_node=self.__class__(child_info.id,self.__dbtable__,self.__foreignclass__)
+            child_node=self.__class__(child_info.id,self.__foreignclass__)
             self.add_child(child_node)
             if recursion:
                 child_node.breed(recursion)
@@ -287,11 +288,11 @@ class Server(NodeNet):
     """Server.s --->  sqlobject ---> TABLE:servers"""
     __nodemap__ = {}
     current_node = None
+    __dbtable__ = 't_server'
 
-    def __init__(self, dbid=0, tablename=None, foreignclass=None):
+    def __init__(self, dbid=0,  foreignclass=None):
         """Constructor"""
-        super(Server, self).__init__(dbid, 
-                                     tablename if tablename else "t_%s" % string.lower(self.__class__.__name__),
+        super(Server, self).__init__(dbid,
                                      foreignclass)
 
 
@@ -363,10 +364,6 @@ class Server(NodeNet):
             if self.s.role in ['rds']:
                 raise Exception("This server role is %s: can't execute any cmd" % self.s.role)
 
-            #if self.level > 2:
-            #    raise Exception("Don't supply operation on 4 round")
-            #env.host_string = host_string
-            #env.gateway = gateway_string
             hiding_clause = (
                 'running' if hide_running else None, 'stdout' if hide_stdout else None,
                 'stderr' if hide_stderr else None)
@@ -374,20 +371,21 @@ class Server(NodeNet):
             with settings(hide(*hiding_clause),
                           host_string=host_string,
                           gateway=gateway_string,
-                          skip_bad_hosts=False,
+                          skip_bad_hosts=True,
                           abort_exception=FabricAbortException(),
-                          connection_attempts=2,
+                          connection_attempts=1,
                           disable_known_hosts=True,
-                          timeout=15,
+                          timeout=5,
+                          command_timeout=5,
                           colorize_errors=True,
                           abort_on_prompts=abort_on_prompts,
                           warn_only=hide_warning,
                           password=password if password else None,
                           output_prefix=False,
-                          keepalive=5):
-                #   env.eagerly_disconnect=True
-                #   env.keepalive = 5
-                result = run(cmd, shell=False)
+                          eagerly_disconnect=True,
+                          keepalive=5,
+                          parallel=True):
+                result = run(cmd, shell=False, timeout=5)
                 out.result = str(result)
                 if hasattr(result, 'return_code'):
                     out.return_code = result.return_code
@@ -523,27 +521,24 @@ class Server(NodeNet):
     def piece(cls, line):
         if cls.__dbclass__ is None:
             return None
-        dbids = cls.__dbclass__.piece(line)
+        #dbids = cls.__dbclass__.piece(line)
         serverlist = []
-        for i in dbids:
+        for i in cls.get_dbclass().piece(line):
             tnode = cls.get_node(i)
             if tnode:
                 serverlist.append(tnode)
         return serverlist
 
     def add_child_info(self, region, product, role, ip_oper, description, loginuser='root'):
-        dbsession = self.__class__.__dbsession__
-        dbclass = self.__class__.__dbclass__
-        dbsession.add(dbclass(pid=self.dbid,
+        self.get_dbclass().add(pid=self.dbid,
                               ip_oper=ip_oper,
                               description=description,
                               region=region,
                               product=product,
                               role=role,
                               loginuser=loginuser
-        ))
-        dbsession.commit()
-        dbsession.close()
+        )
+
 
 
     @classmethod
@@ -559,6 +554,100 @@ class Server(NodeNet):
         #tmp=start + end
         #result=sorted(set(tmp),key=tmp.index)
         return result
+    
+    def _transfer(self):
+            walkpath = self.server.walk(self.server, value)
+            for (src_srv, dst_srv) in map(None, walkpath, walkpath[1:]):
+                if src_srv is not None and not self.trans_list.has_key(src_srv.dbid):
+                    self.trans_list[src_srv.dbid] = [src_srv, 0, None]
+                if dst_srv is not None and not self.trans_list.has_key(dst_srv.dbid):
+                    self.trans_list[dst_srv.dbid] = [dst_srv, 0, None]
+                if dst_srv is None and self.trans_list.has_key(src_srv.dbid):
+                    print "%s+-->%s" % (string.ljust(' ', src_srv.level * 4, ) + str(src_srv), str(dst_srv)),
+                    if self.trans_list[src_srv.dbid][1] == 1:
+                        if src_srv.exists(os.path.join(self.tmppath, self.uuid)):
+                            if not src_srv.exists(dest_path):
+                                src_srv.execute("mkdir -p %s" % dest_path, hide_stdout=True,
+                                                hide_puts=True, hide_server_info=True)
+                            exe_result = src_srv.execute("""mv %s %s %s %s""" % (
+                                os.path.join(self.tmppath, self.uuid), os.path.join(dest_path, self._lfile)
+                                , (" && chmod -R %s %s" % (mode, os.path.join(dest_path, self._lfile))) if mode else ''
+                                ,
+                                (" && chown -R %s %s" % (owner, os.path.join(dest_path, self._lfile))) if owner else ''
+                            ), hide_stdout=True, hide_puts=True, hide_server_info=True)
+                            if exe_result.succeed:
+                                self.trans_list[src_srv.dbid][1] = 0
+                                print 'move finished'
+                            else:
+                                print 'move failed:%s' % exe_result.result
+                        else:
+                            print 'No target:%s' % os.path.join(self.tmppath, self.uuid)
+                    elif self.trans_list[src_srv.dbid][1] > 1:
+                        if src_srv.exists(os.path.join(self.tmppath, self.uuid)):
+                            if not src_srv.exists(dest_path):
+                                src_srv.execute("mkdir -p %s" % dest_path, hide_stdout=True,
+                                                hide_puts=True, hide_server_info=True)
+                            exe_result = src_srv.execute("""cp -r  %s %s   %s   %s""" % (
+                                os.path.join(self.tmppath, self.uuid), os.path.join(dest_path, self._lfile)
+                                , (" && chmod -R %s %s" % (mode, os.path.join(dest_path, self._lfile))) if mode else ''
+                                ,
+                                (" && chown -R %s %s" % (owner, os.path.join(dest_path, self._lfile))) if owner else ''
+                            ), hide_stdout=True, hide_puts=True, hide_server_info=True)
+                            if exe_result.succeed:
+                            #  self.trans_list[src_srv.dbid][1]=0
+                                print 'copy finished'
+                            else:
+                                print 'copy failed:%s' % exe_result.result
+                        else:
+                            print 'No target:%s' % os.path.join(self.tmppath, self.uuid)
+                    continue
+                if src_srv.level > dst_srv.level and self.trans_list.has_key(src_srv.dbid) and self.trans_list.has_key(
+                        dst_srv.dbid):
+                    if self.trans_list[dst_srv.dbid][1] > 0 or dst_srv.exists(os.path.join(self.tmppath, self.uuid)):
+                        self.trans_list[dst_srv.dbid][1] += 1
+                    else:
+                        print "%s+-->%s" % (string.ljust(' ', src_srv.level * 4, ) + str(src_srv), str(dst_srv)),
+                        exe_result = dst_srv.execute(
+                            "scp -r %s:%s %s" % ("%s@%s" % (src_srv.s.loginuser, src_srv.s.ip_oper)
+                                                 , self.source_path if src_srv == self.server else os.path.join(
+                                self.tmppath, self.uuid)
+                                                 , os.path.join(self.tmppath,
+                                                                self.uuid) if src_srv == self.server else os.path.join(
+                                self.tmppath)
+                            ), hide_stdout=True, hide_puts=True, hide_server_info=True)
+                        if exe_result.succeed:
+                            self.trans_list[dst_srv.dbid][1] += 1
+                            self.trans_list[dst_srv.dbid][2] = 'OK'
+                            print 'ok'
+                        else:
+                            self.trans_list[dst_srv.dbid][2] = 'Error:%s' % exe_result.result
+                            print 'Error:%s' % exe_result.result
+                            break
+                elif src_srv.level < dst_srv.level and self.trans_list.has_key(
+                        src_srv.dbid) and self.trans_list.has_key(dst_srv.dbid):
+                    if self.trans_list[dst_srv.dbid][1] > 0 or dst_srv.exists(os.path.join(self.tmppath, self.uuid)):
+                        self.trans_list[dst_srv.dbid][1] += 1
+                    else:
+                        print "%s+-->%s" % (string.ljust(' ', src_srv.level * 4, ) + str(src_srv), str(dst_srv)),
+                        exe_result = src_srv.execute("scp -r %s %s:%s" % (
+                            self.source_path if src_srv == self.server else os.path.join(self.tmppath, self.uuid)
+                            , "%s@%s" % (dst_srv.s.loginuser, dst_srv.s.ip_oper)
+                            ,
+                            os.path.join(self.tmppath, self.uuid) if src_srv == self.server else os.path.join(
+                                self.tmppath)
+                        ), hide_stdout=True, hide_puts=True, hide_server_info=True)
+                        if exe_result.succeed:
+                            self.trans_list[dst_srv.dbid][1] += 1
+                            self.trans_list[dst_srv.dbid][2] = 'OK'
+                            print 'ok'
+                        else:
+                            self.trans_list[dst_srv.dbid][2] = 'Error:%s' % exe_result.result
+                            print 'Error:%s' % exe_result.result
+                            break
+    def gets(self):
+        pass
+    def puts(self):
+        pass
 
 
 
@@ -567,60 +656,89 @@ class Server(NodeNet):
 ####http://blog.csdn.net/treesky/article/details/7088284###
 __metaclass__ = type
 class Operation(object):
+    # db table name
+    __dbtable__ = None
     # db table class
     __dbclass__ = None  
     # server instance
     server = None
-    def __init__(self,server,table_name=None):
+    def __init__(self,server):
         """Constructor"""
     #    pdb.set_trace()
         if not isinstance(server,Server):
             raise Exception("Init Error: %s is not <Server> instance" % str(server))
         self.server=server
-        if self.__dbclass__ is None and table_name is not None :
-            self.__dbclass__=self.get_dbclass(table_name)
+        if self.__dbclass__ is None and self.__dbtable__ is not None :
+            self.get_dbclass()
+    #@classmethod
+    #def get_dbclass(cls,table_name=None):
+        #if  cls.__dbclass__ is not None:
+            #return cls.__dbclass__      
+        #if table_name is None:
+            #return None
+        ##if table_name is None:
+            ##selfclassname = cls.__name__
+            ##dbclassname = "t_%s" % string.lower(selfclassname)
+        ##else:
+        #dbclassname=table_name
+        #dbclass = None
+        #import importlib
+        #mo = importlib.import_module('dbi')
+        #if mo:
+            #if hasattr(mo, dbclassname):
+                #dbclass = getattr(mo, dbclassname)
+                #if dbclass :
+                    #cls.__dbclass__ = dbclass
+                    #return dbclass
+            #else:
+                #return None
+        #else:
+            #return None
+        
+    
     @classmethod
-    def get_dbclass(cls,table_name=None):
+    def get_dbclass(cls):
         if  cls.__dbclass__ is not None:
             return cls.__dbclass__      
-        if table_name is None:
+        if cls.__dbtable__ is None:
             return None
-        #if table_name is None:
-            #selfclassname = cls.__name__
-            #dbclassname = "t_%s" % string.lower(selfclassname)
-        #else:
-        dbclassname=table_name
+        dbclassname=cls.__dbtable__ 
         dbclass = None
         import importlib
-        mo = importlib.import_module('dbi')
+        module_name='dbi'
+        mo = importlib.import_module(module_name)
         if mo:
             if hasattr(mo, dbclassname):
                 dbclass = getattr(mo, dbclassname)
                 if dbclass :
                     cls.__dbclass__ = dbclass
                     return dbclass
+                else:
+                    raise "There is no class of %s in %s module" % ( dbclassname, module_name)
             else:
                 return None
         else:
             return None
-        
-    
+
     
 
 class IPsec(Operation):
+    __dbtable__ = 't_ipsec'
     def __init__(self, server):
       #  Operation.__init__(self,server,"t_%s" % string.lower(self.__class__.__name__))
-        super(IPsec, self).__init__(server, "t_%s" % string.lower(self.__class__.__name__))
+        super(IPsec, self).__init__(server)
 
     def add_filter(self, protocal, source_addr, dport, description, status=0, chain='INPUT'):
-        if self.__dbclass__:
-            self.__dbclass__.add_item(server_id=self.server.dbid,
+        try:
+            self.get_dbclass().add(server_id=self.server.dbid,
                               protocal=protocal,
                               source_addr=source_addr,
                               dport=dport,
                               description=description,
                               status=status,
                               chain=chain)
+        except:
+            pass
 
 
     def del_filter(self, dbid):
@@ -647,8 +765,11 @@ class IPsec(Operation):
         else:
             print "Collect from %s: Failed -> %s" % (self.server,exec_result.result)
     def clear_filters(self):
-        self.__dbclass__.delete(self.server.dbid,"server_id")
-        print "clear finished"
+        try:
+            self.get_dbclass().delete(self.server.dbid,"server_id")
+            print "clear finished"
+        except:
+            pass
  
 
     def print_filter(self):
@@ -661,7 +782,7 @@ class IPsec(Operation):
         res_table.padding_width = 1
         res_table.encoding = self.server.encoding  
         #for i in res_list:
-        for i in self.__dbclass__.get(self.server.dbid,"server_id"):
+        for i in self.get_dbclass().get(self.server.dbid,"server_id"):
             res_table.add_row([i.id, i.chain, i.source_addr, i.dport, i.description])
         
         print res_table        
@@ -684,7 +805,7 @@ class IPsec(Operation):
                 filterlist += '''$IPTABLES -I INPUT -s %s -p tcp --dport 22 -j ACCEPT; #cc:%s\n''' % (
                     item, self.server.parent)
 
-        for i in self.__dbclass__.get(self.server.dbid,"server_id"):
+        for i in self.get_dbclass().get(self.server.dbid,"server_id"):
             filterlist += '''$IPTABLES -I %s -s %s -p %s -m multiport --dport %s -j ACCEPT; #%s\n''' % (
                 i.chain, i.source_addr, i.protocal, i.dport, i.description)
 
@@ -1482,7 +1603,7 @@ class Nagios(Operation):
 
 
 class SysInfo(Operation):
-
+    __dbtable__ = 't_sysinfo'
     __checklist__ = None
 
 
@@ -1501,7 +1622,7 @@ class SysInfo(Operation):
         cls.__dbsession__.close()
         return result
 
-    def __init__(self, srv):
+    def __init__(self, server):
         super(SysInfo, self).__init__(server, "t_%s" % string.lower(self.__class__.__name__))
         
         if self.__checklist__ is None:
@@ -2048,12 +2169,13 @@ class Piece(object):
 
 
 class Crontab(Operation):
+    __dbtable__ = 't_crontab'
     groups = ['backup', 'hardware_monitor', 'game_count', 'finance_query', 'ntp''clean_data', 'other', 'temp']
 
 
 
     def __init__(self, server):
-        super(Crontab, self).__init__(server, "t_%s" % string.lower(self.__class__.__name__))
+        super(Crontab, self).__init__(server)
         
 
 
@@ -2077,16 +2199,19 @@ class Crontab(Operation):
                     process = ' '.join(line.split()[5:]).replace("\'", "\"")
                     status = 1
                     user = self.server.s.loginuser
-                    self.__dbclass__.add(server_id=self.server.dbid,
-                                          pminute=pmin,
-                                          phour=phour,
-                                          pday=pday,
-                                          pmonth=pmon,
-                                          pweek=pweek,
-                                          process=process,
-                                          status=status,
-                                          user=self.server.s.loginuser,
-                                          description='')
+                    try:
+                        self.get_dbclass().add(server_id=self.server.dbid,
+                                              pminute=pmin,
+                                              phour=phour,
+                                              pday=pday,
+                                              pmonth=pmon,
+                                              pweek=pweek,
+                                              process=process,
+                                              status=status,
+                                              user=self.server.s.loginuser,
+                                              description='')
+                    except:
+                        continue
 
 
                     count += 1
@@ -2098,7 +2223,7 @@ class Crontab(Operation):
             res_table.align[col_name]='l'
         res_table.padding_width = 1
         res_table.encoding = self.server.encoding  
-        for i in self.__dbclass__.get(self.server.dbid,"server_id"):
+        for i in self.get_dbclass().get(self.server.dbid,"server_id"):
             res_table.add_row([i.id, i.pminute, i.phour, i.pday, i.pmonth, i.pweek, i.process, i.user, i.status, i.description])
         print res_table
 
@@ -2120,7 +2245,7 @@ class Crontab(Operation):
         import time
 
         '''cat /var/spool/cron/root'''
-        for instance in self.__dbclass__.get(dbid):
+        for instance in self.get_dbclass().get(dbid):
             changetime = time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time()))
             sed_reg = self._sed_reg(instance)
 
@@ -2136,7 +2261,7 @@ class Crontab(Operation):
 
 
     def disable(self, *dbid):
-        for instance in self.__dbclass__.get(dbid):
+        for instance in self.get_dbclass().get(dbid):
             changetime = time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time()))
             sed_reg = self._sed_reg(instance)
 
@@ -2153,7 +2278,7 @@ class Crontab(Operation):
 
 
     def enable(self, *dbid):
-        for instance in self.__dbclass__.get(dbid):
+        for instance in self.get_dbclass().get(dbid):
             changetime = time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time()))
             sed_reg = self._sed_reg(instance)
 
@@ -2164,7 +2289,7 @@ class Crontab(Operation):
             exe_result = self.server.execute(cmd)
             if exe_result.succeed:
                 print 'enable succeed of ID:%s' % instance.id
-                self.__dbclass__.set_attrs(instance.id,status=0)
+                self.get_dbclass().set_attrs(instance.id,status=0)
             else:
                 print 'enable failure of ID:%s and Error:%s' % (instance.id, exe_result.result)
 
@@ -2180,7 +2305,7 @@ class Crontab(Operation):
     def change_description(self, description, dbid):
         for instance in self.__dbclass__.get( dbid):
             print 'description for ID:%s to %s' % (instance.id, description)
-            self.__dbclass__.set_attrs(dbid,description=description)
+            self.get_dbclass().set_attrs(dbid,description=description)
 
 
     def show(self):
@@ -2189,7 +2314,7 @@ class Crontab(Operation):
     def change_group(self, group_name, *dbid):
         for instance in self.__dbclass__.get( dbid):
             print 'change_group for ID:%s to %s' % (instance.id, group_name)
-            self.__dbclass__.set_attrs(dbid,group=group_name)
+            self.get_dbclass().set_attrs(dbid,group=group_name)
             instance.group = group_name
 
 
