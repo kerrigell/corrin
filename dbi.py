@@ -15,11 +15,13 @@ from sqlalchemy.orm import relationship,backref
 import ConfigParser
 import time, datetime
 import sys, os.path
+from alembic.config import Config
+from alembic import command
 
 
 def _get_db_string():
     config = ConfigParser.SafeConfigParser()
-    base_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
+    base_path = os.path.dirname(os.path.abspath(__file__))
     config.read(os.path.join(base_path, "config/dbi.ini"))
     dblink = """%s://%s%s@%s/%s?charset=%s""" % (config.get('database', 'engine'),
                                                  config.get('database', 'user'),
@@ -43,6 +45,11 @@ session = Session()
 
 def init_db():
     BaseModel.metadata.create_all(engine)
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    alembic_cfg_file = os.path.join(base_path, "alembic.ini")
+    alembic_cfg = Config(alembic_cfg_file)
+    ## Initialize the alembic version after fully create a new database by "create_all"
+    # command.stamp(alembic_cfg, "head")
 def drop_db():
     BaseModel.metadata.drop_all(engine)
 
@@ -246,7 +253,7 @@ class t_feature(BaseModel):
 class t_ipsec(BaseModel):
     __tablename__ = 't_ipsec'
     id = Column(Integer, primary_key=True)
-    server_id = Column(Integer)
+    server_id = Column(Integer, index=True)
     chain = Column(Enum('INPUT', 'OUTPUT', 'FORWARD'))
     source_addr = Column(VARCHAR(50))
     dest_addr = Column(VARCHAR(50))
@@ -278,7 +285,7 @@ class t_sysinfo(BaseModel):
     need_value = Column(VARCHAR(50))
     check_name = Column(VARCHAR(40))
     check_cmd = Column(VARCHAR(255))
-    sys_type = Column(Enum('Windows', 'Linux', 'All'))
+    sys_type = Column(Enum('Windows', 'Linux', 'All'), index=True)
     result_reg = Column(VARCHAR(50))
     record_table = Column(VARCHAR(50))
     record_field = Column(VARCHAR(50))
