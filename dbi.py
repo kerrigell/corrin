@@ -129,7 +129,7 @@ class BaseModel(Base):
         try:
             session=Session()
             if hasattr(cls, 'id'):
-                session.query(cls).filter(cls.id == id).update(**attrs)
+                session.query(cls).filter(cls.id == id).update(attrs)
                 session.commit()
         except Exception,e:
             print e
@@ -138,6 +138,8 @@ class BaseModel(Base):
         finally:
             if session:
                 session.close()
+
+
     @classmethod
     def add(cls, **attrs):
         try:

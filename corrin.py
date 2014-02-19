@@ -659,7 +659,7 @@ class Shell(cmd.Cmd):
               make_option('-c', '--childs', action='store_true', help='get childs '),
               make_option('--check_all', action='store_true', help='check all'),
               make_option('--update', action='store_true', help='update database')])
-    def do_info(self, arg, opts=None):
+    def do_info(self, args, opts=None):
         info_list = self._get_operation_list(self.server.current_node,
                                              inPiece=opts.piece if opts.piece else None,
                                              inCurrent=True,

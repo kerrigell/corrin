@@ -47,17 +47,17 @@ class NodeNet(object):
     # foreign class
     __foreignclass__ = None
 
-    # encoding 
+    # encoding
     encoding = 'gbk'
     #----------------------------------------------------------------------
-    
+
     @classmethod
     def get_dbclass(cls):
         if  cls.__dbclass__ is not None:
-            return cls.__dbclass__      
+            return cls.__dbclass__
         if cls.__dbtable__ is None:
             return None
-        dbclassname=cls.__dbtable__ 
+        dbclassname=cls.__dbtable__
         dbclass = None
         import importlib
         module_name='dbi'
@@ -87,7 +87,7 @@ class NodeNet(object):
         # mapped into db table class
         if self.__dbclass__ is None and self.__dbtable__ is not None:
             self.get_dbclass()
-        
+
         # node relation property
         self.s = self.get_dbclass().get(node_id,first=True) if self.__dbclass__ else None
         if self.s is None:
@@ -110,7 +110,7 @@ class NodeNet(object):
         # init  current node if not exists
         self.set_current_node(self)
 
-        
+
     def add_child(self, child):
         if child is None or not isinstance(child, self.__class__):
             return False
@@ -119,9 +119,9 @@ class NodeNet(object):
         child.root = self.root
         child.level = self.level + 1
         child.parent = self
-        self.childs[child.dbid] = child  
+        self.childs[child.dbid] = child
         return True
-            
+
     @classmethod
     def get_node(cls, dbid):
         if cls.__nodemap__.has_key(dbid):
@@ -154,9 +154,9 @@ class NodeNet(object):
             if recursion:
                 child_node.breed(recursion)
         return 0 if self.childs is None else len(self.childs)
-                
-                
-                
+
+
+
         #if result is None or len(result) == 0:
             #self.childs = {}
             #return 0
@@ -180,7 +180,7 @@ class NodeNet(object):
         self._iter_parent = self._iter_parent.parent
         self._iter_step -= 1
         return self._iter_parent
-    
+
     @classmethod
     def set_current_node(cls,node,force=False):
         if cls.current_node is None:
@@ -192,17 +192,17 @@ class NodeNet(object):
         print "%s+-%s" % (string.ljust('', self.level * 4), self)
         if self.childs:
             for i in self.childs.values():
-                i.print_structure() 
+                i.print_structure()
     def pwd(self):
         for i in self:
             print "%s+-%s" % (string.ljust('', i.level * 4), i)
-            
+
 
     def dockapply(self):
-        if (self.s is None or  
-           self.__dbclass__ is None or 
-           self.__foreignclass__ is None or 
-           self.__dbclass__ is None  or 
+        if (self.s is None or
+           self.__dbclass__ is None or
+           self.__foreignclass__ is None or
+           self.__dbclass__ is None  or
            not hasattr(self.__dbclass__, string.lower("%s_id" % self.__foreignclass__.__name__))):
             return False
         foreignid = getattr(self.s, string.lower("%s_id" % self.__foreignclass__.__name__))
@@ -556,7 +556,7 @@ class Server(NodeNet):
         #tmp=start + end
         #result=sorted(set(tmp),key=tmp.index)
         return result
-    
+
     def _transfer(self):
             walkpath = self.server.walk(self.server, value)
             for (src_srv, dst_srv) in map(None, walkpath, walkpath[1:]):
@@ -661,7 +661,7 @@ class Operation(object):
     # db table name
     __dbtable__ = None
     # db table class
-    __dbclass__ = None  
+    __dbclass__ = None
     # server instance
     server = None
     def __init__(self,server):
@@ -675,7 +675,7 @@ class Operation(object):
     #@classmethod
     #def get_dbclass(cls,table_name=None):
         #if  cls.__dbclass__ is not None:
-            #return cls.__dbclass__      
+            #return cls.__dbclass__
         #if table_name is None:
             #return None
         ##if table_name is None:
@@ -696,15 +696,15 @@ class Operation(object):
                 #return None
         #else:
             #return None
-        
-    
+
+
     @classmethod
     def get_dbclass(cls):
         if  cls.__dbclass__ is not None:
-            return cls.__dbclass__      
+            return cls.__dbclass__
         if cls.__dbtable__ is None:
             return None
-        dbclassname=cls.__dbtable__ 
+        dbclassname=cls.__dbtable__
         dbclass = None
         import importlib
         module_name='dbi'
@@ -722,7 +722,7 @@ class Operation(object):
         else:
             return None
 
-    
+
 
 class IPsec(Operation):
     __dbtable__ = 't_ipsec'
@@ -772,22 +772,22 @@ class IPsec(Operation):
             print "clear finished"
         except:
             pass
- 
+
 
     def print_filter(self):
         res_title=["dbid", "chain", 'source', 'dport', 'description']
         #res_list = self.get_dbinfo()
-        
+
         res_table=prettytable.PrettyTable(res_title)
         for col_name in res_title[1:]:
             res_table.align[col_name]='l'
         res_table.padding_width = 1
-        res_table.encoding = self.server.encoding  
+        res_table.encoding = self.server.encoding
         #for i in res_list:
         for i in self.get_dbclass().get(self.server.dbid,"server_id"):
             res_table.add_row([i.id, i.chain, i.source_addr, i.dport, i.description])
-        
-        print res_table        
+
+        print res_table
 
 
     def make_script(self):
@@ -835,7 +835,7 @@ $IPTABLES -P FORWARD DROP ;
 $IPTABLES -P OUTPUT ACCEPT ;
 service iptables save;
 chkconfig --level=2345 iptables on
-    
+
     ''' % filterlist
         return ipsec_temp
 
@@ -1057,7 +1057,7 @@ class Nagios(Operation):
         ['test monitor script', 'test_script'],
         ['show nrpe.cfg', 'show_nrpe'],
     ]
-    
+
                #"""cd /tmp && \
                #tar zxf Sys-Statistics-Linux-0.66.tar.gz && \
                #cd Sys-Statistics-Linux-0.66 && \
@@ -1070,10 +1070,10 @@ class Nagios(Operation):
                                                 #make test &> /dev/null && \
                                                 #    'is_install_perl-devel'
                                                 None],
-        
+
                 #"""cd /tmp && \
                #tar zxf nagios-plugins-1.4.15.tar.gz && \
-               #cd nagios-plugins-1.4.15 && \                            
+               #cd nagios-plugins-1.4.15 && \
         'is_installed_nagios_plugin': ['tools', 'nagios_plugin', 'client/tools/', '/tmp/',
                """./configure --with-nagios-user=nagios \
                --with-nagios-group=nagios \
@@ -1083,19 +1083,19 @@ class Nagios(Operation):
                1>/dev/null && \
                make 1>/dev/null && \
                make install 1>/dev/null""", None],
-        
+
         'is_openssl_devel': [None, None, None, None, None, None],
-        
-        
+
+
         #"""cd /tmp && \
-        #rpm -ivh --nodeps xinetd-2.3.14-38.el6.x86_64.rpm """,         
+        #rpm -ivh --nodeps xinetd-2.3.14-38.el6.x86_64.rpm """,
         'is_install_xinetd': ['tools', 'xinetd', 'client/tools/', '/tmp/',
-               """""", 
+               """""",
                None],
-                      
+
         #"""cd /tmp &&
         #tar zxf nrpe-2.12.tar.gz &&
-        #cd nrpe-2.12 &&                      
+        #cd nrpe-2.12 &&
         'is_installed_nrpe': ['tools', 'nrpe', 'client/tools/', '/tmp/',
                """./configure 1>/dev/null &&
                make all 1>/dev/null &&
@@ -1105,7 +1105,7 @@ class Nagios(Operation):
                make install-xinetd 1>/dev/null """, None],
         'is_installed_xinetd_nrpe': ['tools', 'xinetd_nrpe', 'client/tools/', '/etc/xinetd.d/', None,
                                                    None],
-        
+
         'is_installed_utils_pm': ['tools', 'utils_pm', 'client/tools/', '/usr/local/nagios/libexec', None,
                                                 None]
     }
@@ -1161,7 +1161,7 @@ class Nagios(Operation):
             INC=`perl -e 'print \"@INC\"'`;
             find ${INC} -name 'Linux.pm' -print 2> /dev/null \
             | grep -q 'Linux.pm' && echo True || echo False;
-            
+
             echo -n "is_installed_nagios_plugin:";
             test -d /usr/local/nagios/libexec && echo True || echo False;
 
@@ -1186,23 +1186,23 @@ class Nagios(Operation):
             echo -n "is_configured_nrpe:";
             grep -q '%s' /etc/xinetd.d/nrpe &>/dev/null \
             && echo True || echo False
-            
+
             echo -n "is_openssl_devel:";
             rpm  -qa | grep openssl-devel &>/dev/null \
-            && echo True || echo False    
-            
+            && echo True || echo False
+
             echo -n "is_install_xinetd:";
             rpm  -qa | grep xinetd &>/dev/null \
-            && echo True || echo False   
-            
+            && echo True || echo False
+
             echo -n "is_install_perl-devel:";
             rpm  -qa | grep perl-devel &>/dev/null \
-            && echo True || echo False  
-            
+            && echo True || echo False
+
             echo -n "is_installed_xinetd_nrpe:";
             test -e /etc/xinetd.d/nrpe \
-            && echo True || echo False;            
-            
+            && echo True || echo False;
+
             """ % (script_shell, self.ip_monitor, self.ip_monitor, self.ip_monitor)
         raw_status = self.server.execute(shell, hide_puts=True)
         if raw_status.succeed:
@@ -1233,7 +1233,7 @@ class Nagios(Operation):
                     make &> /dev/null && \
                     make test &> /dev/null && \
                     make install &> /dev/null && \
-                    rm -f /usr/bin/perl && ln -s /usr/local/bin/perl /usr/bin/perl                    
+                    rm -f /usr/bin/perl && ln -s /usr/local/bin/perl /usr/bin/perl
                     """, hide_puts=True)
             if exe_result.succeed:
                 print 'OK'
@@ -1272,7 +1272,7 @@ class Nagios(Operation):
         for key, value in scripts:
             if (True if force else self.status['is_installed_%s' % key] == 'False'):
                 deploy_list.append(value)
-                
+
         if len(deploy_list)>0:
             exe_result=self.server.root.execute("""cd %s && tar zcvf /tmp/monitor-scripts.tar.gz %s 1>/dev/null""" % (os.path.join(self.base_dir,"client/libexec/"),
                                                                                                            " ".join(deploy_list)
@@ -1289,12 +1289,12 @@ class Nagios(Operation):
                               sed -i 's/^Defaults    requiretty/#Defaults    requiretty/g' /etc/sudoers && \
                               %s""" % """ && """.join([ """(grep %s /etc/sudoers &>/dev/null || sed -i '/nagios/s/$/,%s/g' /etc/sudoers) || echo \"nagios ALL=NOPASSWD: %s\" >> /etc/sudoers  """ % (i,os.path.join('/usr/local/nagios/libexec', i),os.path.join('/usr/local/nagios/libexec', i)) for i in deploy_list])
                 exe_result=self.server.execute(deploy_cmd , hide_puts=True)
-                
+
                 if exe_result.succeed:
                     print 'OK'
                 else:
-                    print 'Error:' + exe_result.result                              
-                              
+                    print 'Error:' + exe_result.result
+
 
 
     def create_user(self):
@@ -1355,9 +1355,9 @@ class Nagios(Operation):
             if len(slist)== 1:
                 return None
             else:
-                return " && ".join(slist)        
-        
-        
+                return " && ".join(slist)
+
+
         if len(self.status) == 0:
             self.check(output=False)
         if True if force and self.status.has_key(check_name) else (
@@ -1608,28 +1608,12 @@ class SysInfo(Operation):
     __dbtable__ = 't_sysinfo'
     __checklist__ = None
 
-
-    @classmethod
-    def _get_dbinfo(cls, sys_type=None, dbid=None):
-        if not cls._get_dbclass():
-            return None
-        result = None
-
-        if sys_type is not None:
-            if dbid is not None:
-                result = cls.__dbsession__.query(cls.__dbclass__).filter(
-                    cls.__dbclass__.sys_type == sys_type and cls.__dbclass__.id == dbid).first()
-            else:
-                result = cls.__dbsession__.query(cls.__dbclass__).filter(cls.__dbclass__.sys_type == sys_type).all()
-        cls.__dbsession__.close()
-        return result
-
     def __init__(self, server):
-        super(SysInfo, self).__init__(server, "t_%s" % string.lower(self.__class__.__name__))
-        
+        # super(SysInfo, self).__init__(server, "t_%s" % string.lower(self.__class__.__name__))
+        super(SysInfo, self).__init__(server)
         if self.__checklist__ is None:
             self.__class__.__checklist__={i.id: i for i in self.__dbclass__.get(self.server.s.os_type,"sys_type")}
-                                          
+
         self.check_result = {}
 
     def check_item(self, dbid=None, do_update=False):
@@ -1654,12 +1638,19 @@ class SysInfo(Operation):
             check_return = string.strip(execute_result.result)
             self.check_result[dbid] = check_return
             if do_update and check_info.record_field and check_info.record_table:
-                self.server.s.update_value(check_info.record_field, check_return)
+                new_values = {check_info.record_field: check_return}
+                self.server.__dbclass__.set_attrs(self.server.dbid, **new_values)
         return check_return
 
     def check_all(self, do_update=False):
         for key, value in self.__class__.__checklist__.iteritems():
             print ("Check [%s]=%s" % (value.check_name, self.check_item(value.id, do_update))).encode('gbk')
+
+
+    def check_less(self, do_update=False):
+        for key, value in self.__checklist__.iteritems():
+            if value.record_field:
+                print ("Check [%s]=%s" % (value.check_name, self.check_item(value.id, do_update)))
 
 
 class Transfer(object):
@@ -2162,7 +2153,7 @@ class Axis(object):
         #(grep %s /etc/sudoers &> /dev/null \
         #|| sed -i '/nagios/s/$/,%s/g' /etc/sudoers) \
         #|| echo \"nagios ALL=NOPASSWD: %s\" \
-        #>> /etc/sudoers        
+        #>> /etc/sudoers
 
 
 class Piece(object):
@@ -2178,7 +2169,7 @@ class Crontab(Operation):
 
     def __init__(self, server):
         super(Crontab, self).__init__(server)
-        
+
 
 
     def available(self):
@@ -2219,12 +2210,12 @@ class Crontab(Operation):
                     count += 1
             print '  %50s' % ('Collected the number of crontab:%s' % count)
 
-    def list(self):     
+    def list(self):
         res_table=prettytable.PrettyTable(["id", "min", 'hou', 'day', 'mon', 'wee', 'process', 'user', 'status', 'description'])
         for col_name in ['hou','day','mon','process','description']:
             res_table.align[col_name]='l'
         res_table.padding_width = 1
-        res_table.encoding = self.server.encoding  
+        res_table.encoding = self.server.encoding
         for i in self.get_dbclass().get(self.server.dbid,"server_id"):
             res_table.add_row([i.id, i.pminute, i.phour, i.pday, i.pmonth, i.pweek, i.process, i.user, i.status, i.description])
         print res_table
@@ -2321,8 +2312,8 @@ class Crontab(Operation):
 
 
 
-# "wget --no-check-certificate -O - http://bootstrap.saltstack.org | sh"  
-#"sed -i '/^\#master: /s/^.*$/master: syndic.vn.salt.cyoper/g' /etc/salt/minion && echo '10.6.6.42  syndic.vn.salt.cyoper'>> /etc/hosts"  
+# "wget --no-check-certificate -O - http://bootstrap.saltstack.org | sh"
+#"sed -i '/^\#master: /s/^.*$/master: syndic.vn.salt.cyoper/g' /etc/salt/minion && echo '10.6.6.42  syndic.vn.salt.cyoper'>> /etc/hosts"
 # "/etc/init.d/salt-minion restart"
 
 #后来发现scp这东西应该属于openssh-clients这个包，运行：
